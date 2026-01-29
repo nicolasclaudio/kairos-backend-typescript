@@ -27,6 +27,8 @@ const mockTaskRepo = {
 
 const mockPlannerService = {
     generateDailyPlan: vi.fn(),
+    calculateDailyLoad: vi.fn().mockResolvedValue({ isOverloaded: false, capacityMinutes: 480, demandMinutes: 120 }),
+    executeBankruptcy: vi.fn(),
 } as any;
 
 const mockLlmService = {

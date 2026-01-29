@@ -39,3 +39,16 @@ export interface Task {
     scheduledStartTime?: Date;
 }
 
+export enum BankruptcyOption {
+    HARD = 'HARD',
+    SOFT = 'SOFT',
+    MANUAL = 'MANUAL'
+}
+
+export interface LoadStatus {
+    capacityMinutes: number;
+    demandMinutes: number;
+    isOverloaded: boolean;
+    overloadRatio: number; // e.g. 1.5 = 150% load
+}
+

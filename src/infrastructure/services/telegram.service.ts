@@ -9,6 +9,7 @@ import { GoalRepository } from '../repositories/goal.repository.js';
 import { TaskRepository } from '../repositories/task.repository.js';
 import { PlannerService } from '../../domain/services/planner.service.js';
 import { LlmService, TaskExtraction } from './llm.service.js';
+import { BankruptcyOption } from '../../domain/entities.js';
 
 export class TelegramService {
     private bot: TelegramBot;
@@ -83,6 +84,11 @@ export class TelegramService {
 
                     // Answer callback to remove loading state
                     await this.bot.answerCallbackQuery(query.id);
+                } else if (query.data.startsWith('bankruptcy:')) {
+                    const option = query.data.split(':')[1] as BankruptcyOption;
+                    const response = await this.plannerService.executeBankruptcy(user.id, option);
+                    await this.bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+                    await this.bot.answerCallbackQuery(query.id);
                 }
             } catch (error) {
                 console.error('Error handling callback:', error);
@@ -155,6 +161,7 @@ export class TelegramService {
             status: 'pending',
             priorityOverride: 3,
             isFixed: data.isFixed,
+            requiredEnergy: 3, // Default for now
             scheduledStartTime: data.scheduledStartTime ? new Date(data.scheduledStartTime) : undefined
         });
 
@@ -166,6 +173,8 @@ export class TelegramService {
             `✅ Tarea guardada en *${goalTitle}*:\n📝 *${task.title}* (${task.estimatedMinutes}m)${timeInfo}`,
             { parse_mode: 'Markdown' }
         );
+
+        await this.checkAndTriggerBankruptcy(chatId, userId);
     }
 
     // Legacy Commands Handlers
@@ -182,8 +191,9 @@ export class TelegramService {
         const goals = await this.goalRepo.findByUserId(userId);
         let inbox = goals.find(g => g.title === 'Inbox');
         if (!inbox) inbox = await this.goalRepo.create({ userId, title: 'Inbox', metaScore: 1, status: 'active' });
-        await this.taskRepo.create({ userId, goalId: inbox.id, title, estimatedMinutes: 30, isFixed: false, status: 'pending' });
+        await this.taskRepo.create({ userId, goalId: inbox.id, title, estimatedMinutes: 30, isFixed: false, status: 'pending', requiredEnergy: 3 });
         await this.bot.sendMessage(chatId, `✅ Tarea en Inbox: ${title}`);
+        await this.checkAndTriggerBankruptcy(chatId, userId);
     }
 
     /**
@@ -198,9 +208,37 @@ export class TelegramService {
             await this.bot.sendMessage(chatId, `⏳ Generando plan para energía nivel ${energy}...`);
             const plan = await this.plannerService.generateDailyPlan(userId, energy);
             await this.bot.sendMessage(chatId, plan, { parse_mode: 'Markdown' });
+
+            // Check overload implicitly
+            await this.checkAndTriggerBankruptcy(chatId, userId);
         } catch (error) {
             console.error('Error in plan:', error);
             await this.bot.sendMessage(chatId, '❌ Error generando plan.');
+        }
+    }
+
+    /**
+     * Checks load and triggers bankruptcy alert if needed
+     */
+    private async checkAndTriggerBankruptcy(chatId: number, userId: number): Promise<void> {
+        const load = await this.plannerService.calculateDailyLoad(userId);
+        if (load.isOverloaded) {
+            const demandHours = (load.demandMinutes / 60).toFixed(1);
+            const capacityHours = (load.capacityMinutes / 60).toFixed(1);
+
+            const msg = `⚠️ **ALERTA DE BANCARROTA TÉCNICA** ⚠️\n\n` +
+                `🔥 Tienes **${demandHours}h** de tareas para **${capacityHours}h** de energía real.\n` +
+                `El plan actual es imposible. ¿Qué hacemos?`;
+
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '⚔️ Liquidación Total (Archivar <5)', callback_data: `bankruptcy:${BankruptcyOption.HARD}` }],
+                    [{ text: '🍃 Reajuste Suave (Mañana)', callback_data: `bankruptcy:${BankruptcyOption.SOFT}` }],
+                    [{ text: '🛠 Selección Manual', callback_data: `bankruptcy:${BankruptcyOption.MANUAL}` }]
+                ]
+            };
+
+            await this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
     }
 
@@ -246,6 +284,20 @@ export class TelegramService {
                 if (count > 0) msg += `🔹 ${g.title}: ${count}\n`;
             }
             await this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+        } catch (e) { await this.bot.sendMessage(chatId, '❌ Error.'); }
+    }
+
+    /**
+     * Handle /archive [id] command
+     */
+    private async handleArchiveCommand(chatId: number, userId: number, text: string): Promise<void> {
+        const taskId = parseInt(text.replace('/archive', '').trim());
+        if (isNaN(taskId)) { await this.bot.sendMessage(chatId, '⚠️ Uso: /archive [ID]'); return; }
+
+        try {
+            const success = await this.taskRepo.archive(taskId, userId);
+            if (success) await this.bot.sendMessage(chatId, `🗑️ Tarea *#${taskId}* archivada.`, { parse_mode: 'Markdown' });
+            else await this.bot.sendMessage(chatId, `❌ Tarea no encontrada.`);
         } catch (e) { await this.bot.sendMessage(chatId, '❌ Error.'); }
     }
 }

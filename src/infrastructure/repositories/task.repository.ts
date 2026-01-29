@@ -10,6 +10,10 @@ export interface ITaskRepository {
     create(task: Omit<Task, 'id'>): Promise<Task>;
     findByGoalId(goalId: number): Promise<Task[]>;
     calculateTotalMinutesByGoal(goalId: number): Promise<number>;
+    archiveLowPriorityTasks(userId: number, threshold: number): Promise<number>;
+    rescheduleTasksToTomorrow(userId: number): Promise<number>;
+    archive(taskId: number, userId: number): Promise<boolean>;
+    markAsDone(taskId: number, userId: number): Promise<boolean>;
 }
 
 export class TaskRepository implements ITaskRepository {
@@ -146,6 +150,17 @@ export class TaskRepository implements ITaskRepository {
         return (result.rowCount || 0) > 0;
     }
 
+    async archive(taskId: number, userId: number): Promise<boolean> {
+        const sql = `
+            UPDATE tasks
+            SET status = 'archived'
+            WHERE id = $1 AND user_id = $2
+            RETURNING id
+        `;
+        const result = await query(sql, [taskId, userId]);
+        return (result.rowCount || 0) > 0;
+    }
+
     /**
      * Count pending tasks for a goal
      */
@@ -178,5 +193,59 @@ export class TaskRepository implements ITaskRepository {
         `;
         const result = await query(sql, [userId]);
         return parseInt(result.rows[0].total, 10) || 0;
+    }
+
+    /**
+     * Sum estimated minutes for all pending tasks (alias for getTotalRemainingMinutes)
+     */
+    async sumPendingEstimatedMinutes(userId: number): Promise<number> {
+        return this.getTotalRemainingMinutes(userId);
+    }
+
+    /**
+     * Archive tasks with meta_score below threshold
+     */
+    async archiveLowPriorityTasks(userId: number, threshold: number): Promise<number> {
+        const sql = `
+            WITH tasks_to_archive AS (
+                SELECT t.id
+                FROM tasks t
+                JOIN goals g ON t.goal_id = g.id
+                WHERE t.user_id = $1 
+                AND t.status = 'pending'
+                AND g.meta_score < $2
+            )
+            UPDATE tasks
+            SET status = 'archived'
+            WHERE id IN (SELECT id FROM tasks_to_archive)
+        `;
+        const result = await query(sql, [userId, threshold]);
+        return result.rowCount || 0;
+    }
+
+    /**
+     * Reschedule tasks to tomorrow (Soft Reset)
+     * For now, this just ensures they are pending and clears any today-specific scheduling if strict?
+     * Or better: shift scheduled_start_time to tomorrow?
+     * For V1 Soft Reset: We just assume 'pending' tasks without fixed dates are moved to backlog.
+     * But if they HAVE scheduled_start_time today, we move them to tomorrow same time? 
+     * Or just NULL the scheduled_start_time to throw them back to pool?
+     * Let's decided: "Move to tomorrow" -> Set scheduled_start_time = scheduled_start_time + 24h OR set to tomorrow 9am?
+     * Let's keep it simple: Remove scheduled_start_time (back to backlog pool) for non-fixed tasks.
+     * Fixed tasks should arguably stay? "Reschedule non-priority tasks".
+     * Let's strictly archive? No, Soft says "Move to tomorrow".
+     * Implementing: Set scheduled_start_time to NULL for all pending tasks (except is_fixed?).
+     * THIS puts them back in the general prioritization pool for next planning.
+     */
+    async rescheduleTasksToTomorrow(userId: number): Promise<number> {
+        const sql = `
+            UPDATE tasks
+            SET scheduled_start_time = NULL
+            WHERE user_id = $1 
+            AND status = 'pending'
+            AND is_fixed = false
+        `;
+        const result = await query(sql, [userId]);
+        return result.rowCount || 0;
     }
 }
