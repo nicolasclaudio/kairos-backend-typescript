@@ -71,3 +71,63 @@ export function validateUserRegistration(
 
     next();
 }
+
+/**
+ * Validate goal creation request
+ */
+export function validateGoalCreation(
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void {
+    const { userId, title, metaScore, targetDate } = req.body;
+
+    // Required fields
+    if (!userId) {
+        res.status(400).json({ error: 'userId is required' });
+        return;
+    }
+
+    if (!title) {
+        res.status(400).json({ error: 'title is required' });
+        return;
+    }
+
+    if (metaScore === undefined) {
+        res.status(400).json({ error: 'metaScore is required' });
+        return;
+    }
+
+    // Type validations
+    if (typeof userId !== 'number') {
+        res.status(400).json({ error: 'userId must be a number' });
+        return;
+    }
+
+    if (typeof title !== 'string') {
+        res.status(400).json({ error: 'title must be a string' });
+        return;
+    }
+
+    if (typeof metaScore !== 'number') {
+        res.status(400).json({ error: 'metaScore must be a number' });
+        return;
+    }
+
+    // Range validation for metaScore
+    if (metaScore < 1 || metaScore > 10) {
+        res.status(400).json({ error: 'metaScore must be between 1 and 10' });
+        return;
+    }
+
+    // Optional targetDate validation
+    if (targetDate !== undefined && targetDate !== null) {
+        const date = new Date(targetDate);
+        if (isNaN(date.getTime())) {
+            res.status(400).json({ error: 'targetDate must be a valid date' });
+            return;
+        }
+    }
+
+    next();
+}
