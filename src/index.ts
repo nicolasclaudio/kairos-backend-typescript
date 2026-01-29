@@ -25,6 +25,24 @@ async function bootstrap() {
         // Verificar conexión a la base de datos
         await checkDatabaseConnection();
 
+        // Initializes Telegram Bot if token is present
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (telegramToken) {
+            const { TelegramService } = await import('./infrastructure/services/telegram.service.js');
+            const { UserRepository } = await import('./infrastructure/repositories/user.repository.js');
+            const { GoalRepository } = await import('./infrastructure/repositories/goal.repository.js');
+            const { TaskRepository } = await import('./infrastructure/repositories/task.repository.js');
+
+            const userRepo = new UserRepository();
+            const goalRepo = new GoalRepository();
+            const taskRepo = new TaskRepository();
+
+            const telegramService = new TelegramService(telegramToken, userRepo, goalRepo, taskRepo);
+            telegramService.initialize();
+        } else {
+            console.warn('⚠️ TELEGRAM_BOT_TOKEN not found. Telegram bot disabled.');
+        }
+
         // Iniciar servidor Express
         app.listen(PORT, () => {
             console.log(`🚀 Kairos Core is running on port ${PORT}`);
