@@ -9,7 +9,11 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -27,8 +31,11 @@
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.16.0",
+    "@vitest/ui": "^4.0.18",
+    "husky": "^9.1.7",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
