@@ -1,0 +1,39 @@
+/**
+ * Kairos Core - Entry Point
+ * Main application entry point - Bootstraps Database and Express Server
+ */
+
+import app from './server.js';
+import { pool } from './config/database.js';
+
+const PORT = process.env.PORT || 3000;
+
+// Función para verificar la conexión a la base de datos
+async function checkDatabaseConnection() {
+    try {
+        await pool.query('SELECT NOW()');
+        console.log('✅ Database connection established');
+    } catch (error) {
+        console.error('❌ Database connection failed:', error);
+        process.exit(1);
+    }
+}
+
+// Inicializar la aplicación
+async function bootstrap() {
+    try {
+        // Verificar conexión a la base de datos
+        await checkDatabaseConnection();
+
+        // Iniciar servidor Express
+        app.listen(PORT, () => {
+            console.log(`🚀 Kairos Core is running on port ${PORT}`);
+            console.log(`📍 Health check: http://localhost:${PORT}/health`);
+        });
+    } catch (error) {
+        console.error('💥 Failed to start Kairos Core:', error);
+        process.exit(1);
+    }
+}
+
+bootstrap();

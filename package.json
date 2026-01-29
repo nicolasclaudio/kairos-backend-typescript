@@ -1,5 +1,5 @@
 {
-  "name": "kairos-core",
+  "name": "kairos-backend-typescript",
   "version": "1.0.0",
   "description": "Kairos Core - Task Planning & Velocity Tracking System",
   "type": "module",
@@ -11,6 +11,10 @@
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit"
   },
+  "repository": {
+    "type": "git",
+    "url": "git@github-personal:nicolasclaudio/kairos-backend-typescript.git"
+  },
   "keywords": [
     "task-management",
     "planning",
@@ -20,8 +24,15 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.16.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "pg": "^8.17.2"
   }
 }
