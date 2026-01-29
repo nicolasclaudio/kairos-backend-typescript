@@ -32,12 +32,14 @@ async function bootstrap() {
             const { UserRepository } = await import('./infrastructure/repositories/user.repository.js');
             const { GoalRepository } = await import('./infrastructure/repositories/goal.repository.js');
             const { TaskRepository } = await import('./infrastructure/repositories/task.repository.js');
+            const { PlannerService } = await import('./domain/services/planner.service.js');
 
             const userRepo = new UserRepository();
             const goalRepo = new GoalRepository();
             const taskRepo = new TaskRepository();
+            const plannerService = new PlannerService(taskRepo);
 
-            const telegramService = new TelegramService(telegramToken, userRepo, goalRepo, taskRepo);
+            const telegramService = new TelegramService(telegramToken, userRepo, goalRepo, taskRepo, plannerService);
             telegramService.initialize();
         } else {
             console.warn('⚠️ TELEGRAM_BOT_TOKEN not found. Telegram bot disabled.');

@@ -18,6 +18,10 @@ const mockTaskRepo = {
     create: vi.fn(),
 } as any;
 
+const mockPlannerService = {
+    generateDailyPlan: vi.fn(),
+} as any;
+
 // Mock TelegramBot
 vi.mock('node-telegram-bot-api', () => {
     return {
@@ -35,7 +39,7 @@ describe('TelegramService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        service = new TelegramService('fake-token', mockUserRepo, mockGoalRepo, mockTaskRepo);
+        service = new TelegramService('fake-token', mockUserRepo, mockGoalRepo, mockTaskRepo, mockPlannerService);
         mockBot = (service as any).bot;
     });
 

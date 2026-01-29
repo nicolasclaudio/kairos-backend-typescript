@@ -8,6 +8,8 @@ import { UserRepository } from '../repositories/user.repository.js';
 import { GoalRepository } from '../repositories/goal.repository.js';
 import { TaskRepository } from '../repositories/task.repository.js';
 
+import { PlannerService } from '../../domain/services/planner.service.js';
+
 export class TelegramService {
     private bot: TelegramBot;
 
@@ -15,7 +17,8 @@ export class TelegramService {
         private token: string,
         private userRepo: UserRepository,
         private goalRepo: GoalRepository,
-        private taskRepo: TaskRepository
+        private taskRepo: TaskRepository,
+        private plannerService: PlannerService
     ) {
         // Basic polling for development
         this.bot = new TelegramBot(token, { polling: true });
@@ -53,10 +56,12 @@ export class TelegramService {
                     await this.handleMetaCommand(chatId, user.id, text);
                 } else if (text.startsWith('/todo')) {
                     await this.handleTodoCommand(chatId, user.id, text);
+                } else if (text.startsWith('/plan')) {
+                    await this.handlePlanCommand(chatId, user.id);
                 } else if (text.startsWith('/start')) {
                     await this.bot.sendMessage(chatId, `👋 Hola ${user.username || 'Viajero'}! Estoy listo para capturar tus metas y tareas.`);
                 } else {
-                    await this.bot.sendMessage(chatId, `🤔 No entendí ese comando. Prueba con:\n/meta [título] - Crear Meta\n/todo [título] - Crear Tarea`);
+                    await this.bot.sendMessage(chatId, `🤔 No entendí ese comando. Prueba con:\n/meta [título] - Crear Meta\n/todo [título] - Crear Tarea\n/plan - Ver Plan del Día`);
                 }
 
             } catch (error) {
@@ -136,6 +141,22 @@ export class TelegramService {
         } catch (error) {
             console.error('Error creating task via Telegram:', error);
             await this.bot.sendMessage(chatId, '❌ Error al crear la tarea.');
+        }
+    }
+
+    /**
+     * Handle /plan command
+     */
+    private async handlePlanCommand(chatId: number, userId: number): Promise<void> {
+        try {
+            await this.bot.sendMessage(chatId, '⏳ Generando tu plan óptimo...');
+
+            const plan = await this.plannerService.generateDailyPlan(userId);
+
+            await this.bot.sendMessage(chatId, plan, { parse_mode: 'Markdown' });
+        } catch (error) {
+            console.error('Error generating plan via Telegram:', error);
+            await this.bot.sendMessage(chatId, '❌ Error al generar el plan.');
         }
     }
 }
