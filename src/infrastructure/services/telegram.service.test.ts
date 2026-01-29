@@ -82,8 +82,7 @@ describe('TelegramService', () => {
         });
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('Meta registrada con éxito'),
-            expect.any(Object)
+            expect.stringContaining('Meta creada')
         );
     });
 
@@ -96,8 +95,7 @@ describe('TelegramService', () => {
         expect(mockGoalRepo.create).not.toHaveBeenCalled();
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('Por favor escribe el título'),
-            expect.any(Object)
+            expect.stringContaining('Falta título')
         );
     });
 
@@ -121,8 +119,7 @@ describe('TelegramService', () => {
         }));
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('Tarea registrada en *Inbox*'),
-            expect.any(Object)
+            expect.stringContaining('Tarea en Inbox')
         );
     });
 

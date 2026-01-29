@@ -34,5 +34,6 @@ export interface Task {
     priorityOverride?: number;
     isFixed: boolean;
     createdAt?: Date | string;
+    scheduledStartTime?: Date;
 }
 
