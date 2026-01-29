@@ -26,13 +26,13 @@ export interface Goal {
 export interface Task {
     id: number;
     userId: number;
-    projectId?: number;
+    goalId: number;
+    projectId?: number | null;
     title: string;
-    estimatedDuration: number;
-    actualDuration?: number;
-    requiredEnergy: EnergyLevel;
-    deadline?: Date;
-    isUserLocked: boolean;
-    scheduledStart?: Date;
-    status: TaskStatus;
+    estimatedMinutes: number;
+    status: 'pending' | 'in_progress' | 'done' | 'archived';
+    priorityOverride?: number;
+    isFixed: boolean;
+    createdAt?: Date | string;
 }
+

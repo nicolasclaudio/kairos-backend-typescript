@@ -18,18 +18,17 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS tasks (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
     project_id INTEGER,
-    title VARCHAR(500) NOT NULL,
-    estimated_duration INTEGER NOT NULL,
-    actual_duration INTEGER,
-    required_energy SMALLINT NOT NULL CHECK (required_energy BETWEEN 1 AND 5),
-    deadline TIMESTAMP WITH TIME ZONE,
-    is_user_locked BOOLEAN NOT NULL DEFAULT FALSE,
-    scheduled_start TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(50) NOT NULL DEFAULT 'backlog',
+    title VARCHAR(255) NOT NULL,
+    estimated_minutes INTEGER NOT NULL DEFAULT 30,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'done', 'archived')),
+    priority_override INTEGER DEFAULT 3 CHECK (priority_override BETWEEN 1 AND 5),
+    is_fixed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
 
 -- Goals table
 CREATE TABLE IF NOT EXISTS goals (
@@ -45,6 +44,7 @@ CREATE TABLE IF NOT EXISTS goals (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_goal_id ON tasks(goal_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_goals_user_id ON goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
