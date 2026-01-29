@@ -56,7 +56,9 @@ export class TelegramService {
                 } else if (text.startsWith('/todo')) {
                     await this.handleTodoCommand(chatId, user.id, text);
                 } else if (text.startsWith('/plan')) {
-                    await this.handlePlanCommand(chatId, user.id);
+                    await this.handlePlanCommand(chatId, user.id, user.currentEnergy);
+                } else if (text.startsWith('/energy')) {
+                    await this.handleEnergyCommand(chatId, user.id, text);
                 } else if (text.startsWith('/done')) {
                     await this.handleDoneCommand(chatId, user.id, text);
                 } else if (text.startsWith('/status')) {
@@ -72,7 +74,10 @@ export class TelegramService {
                         `/todo [título] - Crear Tarea\n` +
                         `/plan - Generar Itinerario\n` +
                         `/done [id] - Completar Tarea\n` +
-                        `/status - Ver Progreso`
+                        `/plan - Generar Itinerario\n` +
+                        `/done [id] - Completar Tarea\n` +
+                        `/status - Ver Progreso\n` +
+                        `/energy [1-5] - Actualizar energía`
                     );
                 }
 
@@ -146,7 +151,8 @@ export class TelegramService {
                 estimatedMinutes: 30, // Default duration
                 status: 'pending',
                 priorityOverride: 3,
-                isFixed: false
+                isFixed: false,
+                requiredEnergy: 3
             });
 
             await this.bot.sendMessage(chatId, `✅ Tarea registrada en *Inbox*:\n*${task.title}*`, { parse_mode: 'Markdown' });
@@ -159,16 +165,37 @@ export class TelegramService {
     /**
      * Handle /plan command
      */
-    private async handlePlanCommand(chatId: number, userId: number): Promise<void> {
+    private async handlePlanCommand(chatId: number, userId: number, userEnergy: number): Promise<void> {
         try {
             await this.bot.sendMessage(chatId, '⏳ Generando tu plan óptimo...');
 
-            const plan = await this.plannerService.generateDailyPlan(userId);
+            const plan = await this.plannerService.generateDailyPlan(userId, userEnergy);
 
             await this.bot.sendMessage(chatId, plan, { parse_mode: 'Markdown' });
         } catch (error) {
             console.error('Error generating plan via Telegram:', error);
             await this.bot.sendMessage(chatId, '❌ Error al generar el plan.');
+        }
+    }
+
+    /**
+     * Handle /energy command
+     */
+    private async handleEnergyCommand(chatId: number, userId: number, text: string): Promise<void> {
+        const levelStr = text.replace('/energy', '').trim();
+        const level = parseInt(levelStr, 10);
+
+        if (isNaN(level) || level < 1 || level > 5) {
+            await this.bot.sendMessage(chatId, '⚠️ Por favor indica un nivel de 1 (Bajo) a 5 (Alto).\nEj: `/energy 4`', { parse_mode: 'Markdown' });
+            return;
+        }
+
+        try {
+            await this.userRepo.updateEnergy(userId, level);
+            await this.bot.sendMessage(chatId, `⚡ Energía actualizada a *${level}*.\n¿Quieres reajustar tu plan? Usa /plan`, { parse_mode: 'Markdown' });
+        } catch (error) {
+            console.error('Error updating energy:', error);
+            await this.bot.sendMessage(chatId, '❌ Error al actualizar energía.');
         }
     }
 

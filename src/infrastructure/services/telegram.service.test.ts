@@ -7,6 +7,7 @@ import TelegramBot from 'node-telegram-bot-api';
 const mockUserRepo = {
     findByTelegramId: vi.fn(),
     create: vi.fn(),
+    updateEnergy: vi.fn(),
 } as any;
 
 const mockGoalRepo = {
@@ -78,7 +79,7 @@ describe('TelegramService', () => {
 
     it('should create a goal with /meta command', async () => {
         service.initialize();
-        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, username: 'nico' });
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, username: 'nico', currentEnergy: 3 });
         mockGoalRepo.create.mockResolvedValue({ id: 10, title: 'Aprender Rust' });
 
         await simulateMessage('/meta Aprender Rust');
@@ -98,7 +99,7 @@ describe('TelegramService', () => {
 
     it('should handle missing title in /meta command', async () => {
         service.initialize();
-        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, currentEnergy: 3 });
 
         await simulateMessage('/meta');
 
@@ -112,7 +113,7 @@ describe('TelegramService', () => {
 
     it('should create a task in Inbox with /todo command', async () => {
         service.initialize();
-        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, currentEnergy: 3 });
 
         // Mock existing Inbox goal
         mockGoalRepo.findByUserId.mockResolvedValue([
@@ -137,7 +138,7 @@ describe('TelegramService', () => {
 
     it('should create Inbox goal if not exists for /todo command', async () => {
         service.initialize();
-        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, currentEnergy: 3 });
 
         // No goals
         mockGoalRepo.findByUserId.mockResolvedValue([]);
@@ -159,7 +160,7 @@ describe('TelegramService', () => {
 
     it('should mark task as done with /done command', async () => {
         service.initialize();
-        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, currentEnergy: 3 });
         mockTaskRepo.markAsDone.mockResolvedValue(true);
 
         await simulateMessage('/done 123');
@@ -174,7 +175,7 @@ describe('TelegramService', () => {
 
     it('should generate status report with /status command', async () => {
         service.initialize();
-        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, currentEnergy: 3 });
         mockGoalRepo.findByUserId.mockResolvedValue([
             { id: 10, title: 'Goal 1', metaScore: 10, status: 'active' }
         ]);
@@ -189,5 +190,30 @@ describe('TelegramService', () => {
             expect.stringContaining('Estado del Proyecto'),
             expect.any(Object)
         );
+    });
+
+    it('should update user energy with /energy command', async () => {
+        service.initialize();
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1, currentEnergy: 3 });
+        mockUserRepo.updateEnergy.mockResolvedValue(undefined);
+
+        await simulateMessage('/energy 5');
+
+        expect(mockUserRepo.updateEnergy).toHaveBeenCalledWith(1, 5);
+        expect(mockBot.sendMessage).toHaveBeenCalledWith(
+            999,
+            expect.stringContaining('Energía actualizada'),
+            expect.any(Object)
+        );
+    });
+
+    it('should pass currentEnergy to generateDailyPlan via /plan', async () => {
+        service.initialize();
+        const userWithEnergy = { id: 1, currentEnergy: 4 };
+        mockUserRepo.findByTelegramId.mockResolvedValue(userWithEnergy);
+
+        await simulateMessage('/plan');
+
+        expect(mockPlannerService.generateDailyPlan).toHaveBeenCalledWith(1, 4);
     });
 });

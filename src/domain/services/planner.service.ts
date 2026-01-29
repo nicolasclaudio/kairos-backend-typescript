@@ -13,7 +13,7 @@ export class PlannerService {
     /**
      * Generates a daily plan based on pending tasks priority
      */
-    async generateDailyPlan(userId: number): Promise<string> {
+    async generateDailyPlan(userId: number, userEnergy: number = 3): Promise<string> {
         // 1. Fetch tasks with goal context
         const tasks = await this.taskRepo.findAllPendingWithGoalInfo(userId);
 
@@ -22,7 +22,7 @@ export class PlannerService {
         }
 
         // 2. Sort/Prioritize (The Algorithm)
-        const sortedTasks = this.prioritizeTasks(tasks);
+        const sortedTasks = this.prioritizeTasks(tasks, userEnergy);
 
         // 3. Time Blocking & Formatting
         return this.formatSchedule(sortedTasks);
@@ -31,22 +31,27 @@ export class PlannerService {
     /**
      * Prioritizes tasks based on:
      * 1. Fixed status (locked in time - strictly first for V1)
-     * 2. Strategic Value (Goal MetaScore)
+     * 2. Context Score (MetaScore + Energy Fit)
      * 3. Tactical Priority (Task Priority Override)
      */
-    private prioritizeTasks(tasks: TaskWithGoal[]): TaskWithGoal[] {
+    private prioritizeTasks(tasks: TaskWithGoal[], userEnergy: number): TaskWithGoal[] {
         return tasks.sort((a, b) => {
             // 1. Fixed tasks first
             if (a.isFixed && !b.isFixed) return -1;
             if (!a.isFixed && b.isFixed) return 1;
 
-            // 2. Goal MetaScore (Strategic Alignment)
-            // Higher meta_score means higher priority
-            const scoreDiff = (b.goalMetaScore || 0) - (a.goalMetaScore || 0);
+            // 2. Calculate Composite Scores
+            const fitA = (5 - Math.abs(userEnergy - (a.requiredEnergy || 3))) * 2; // Max 10 (Perfect Match), Min 2 (Diff 4)
+            const fitB = (5 - Math.abs(userEnergy - (b.requiredEnergy || 3))) * 2;
+
+            const scoreA = (a.goalMetaScore || 0) + fitA;
+            const scoreB = (b.goalMetaScore || 0) + fitB;
+
+            // Sort by Composite Score
+            const scoreDiff = scoreB - scoreA;
             if (scoreDiff !== 0) return scoreDiff;
 
-            // 3. Task Priority (Tactical Urgency)
-            // Higher priority_override means higher priority
+            // 3. Task Priority (Tactical Urgency as tie-breaker)
             return (b.priorityOverride || 3) - (a.priorityOverride || 3);
         });
     }
