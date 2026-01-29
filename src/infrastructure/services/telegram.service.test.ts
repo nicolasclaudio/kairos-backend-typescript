@@ -6,6 +6,7 @@ import TelegramBot from 'node-telegram-bot-api';
 // Mock dependencies
 const mockUserRepo = {
     findByTelegramId: vi.fn(),
+    findById: vi.fn(),
     create: vi.fn(),
     updateEnergy: vi.fn(),
 } as any;
@@ -28,6 +29,10 @@ const mockPlannerService = {
     generateDailyPlan: vi.fn(),
 } as any;
 
+const mockLlmService = {
+    extractTaskDetails: vi.fn(),
+} as any;
+
 // Mock TelegramBot
 vi.mock('node-telegram-bot-api', () => {
     return {
@@ -45,7 +50,7 @@ describe('TelegramService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        service = new TelegramService('fake-token', mockUserRepo, mockGoalRepo, mockTaskRepo, mockPlannerService);
+        service = new TelegramService('fake-token', mockUserRepo, mockGoalRepo, mockTaskRepo, mockPlannerService, mockLlmService);
         mockBot = (service as any).bot;
     });
 
@@ -165,7 +170,7 @@ describe('TelegramService', () => {
         expect(mockTaskRepo.markAsDone).toHaveBeenCalledWith(123, 1);
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('marcada como completada'),
+            expect.stringContaining('Tarea *#123* completada'),
             expect.any(Object)
         );
     });
@@ -184,7 +189,7 @@ describe('TelegramService', () => {
 
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('Estado del Proyecto'),
+            expect.stringContaining('Status'),
             expect.any(Object)
         );
     });
@@ -199,15 +204,16 @@ describe('TelegramService', () => {
         expect(mockUserRepo.updateEnergy).toHaveBeenCalledWith(1, 5);
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('Energía actualizada'),
+            expect.stringContaining('Energía:'),
             expect.any(Object)
         );
     });
 
     it('should pass currentEnergy to generateDailyPlan via /plan', async () => {
         service.initialize();
+        service.initialize();
         const userWithEnergy = { id: 1, currentEnergy: 4 };
-        mockUserRepo.findByTelegramId.mockResolvedValue(userWithEnergy);
+        mockUserRepo.findById.mockResolvedValue(userWithEnergy);
 
         await simulateMessage('/plan');
 

@@ -33,13 +33,15 @@ async function bootstrap() {
             const { GoalRepository } = await import('./infrastructure/repositories/goal.repository.js');
             const { TaskRepository } = await import('./infrastructure/repositories/task.repository.js');
             const { LlmService } = await import('./infrastructure/services/llm.service.js');
+            const { PlannerService } = await import('./domain/services/planner.service.js');
 
             const userRepo = new UserRepository();
             const goalRepo = new GoalRepository();
             const taskRepo = new TaskRepository();
             const llmService = new LlmService();
+            const plannerService = new PlannerService(taskRepo, userRepo); // Using real deps if planner depends on them
 
-            const telegramService = new TelegramService(telegramToken, userRepo, goalRepo, taskRepo, llmService);
+            const telegramService = new TelegramService(telegramToken, userRepo, goalRepo, taskRepo, plannerService, llmService);
             telegramService.initialize();
         } else {
             console.warn('⚠️ TELEGRAM_BOT_TOKEN not found. Telegram bot disabled.');

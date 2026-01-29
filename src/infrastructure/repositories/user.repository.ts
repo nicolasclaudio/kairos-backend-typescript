@@ -9,6 +9,8 @@ import { query } from '../../config/database.js';
 export interface IUserRepository {
     create(user: Omit<User, 'id'>): Promise<User>;
     findByTelegramId(telegramId: string): Promise<User | null>;
+    findByTelegramId(telegramId: string): Promise<User | null>;
+    findById(id: number): Promise<User | null>;
     updateEnergy(userId: number, energy: number): Promise<void>;
 }
 
@@ -82,6 +84,13 @@ export class UserRepository implements IUserRepository {
      * @param row Database row
      * @returns User entity
      */
+    async findById(id: number): Promise<User | null> {
+        const sql = `SELECT * FROM users WHERE id = $1`;
+        const result = await query(sql, [id]);
+        if (result.rows.length === 0) return null;
+        return this.mapRowToUser(result.rows[0]);
+    }
+
     private mapRowToUser(row: any): User {
         return {
             id: row.id,
