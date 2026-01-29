@@ -1,6 +1,6 @@
-
-import { Task } from '../entities.js';
+import { Task, LoadStatus, BankruptcyOption } from '../entities.js';
 import { TaskRepository } from '../../infrastructure/repositories/task.repository.js';
+import { UserRepository } from '../../infrastructure/repositories/user.repository.js';
 
 export interface TaskWithGoal extends Task {
     goalTitle: string;
@@ -8,7 +8,73 @@ export interface TaskWithGoal extends Task {
 }
 
 export class PlannerService {
-    constructor(private taskRepo: TaskRepository) { }
+    constructor(
+        private taskRepo: TaskRepository,
+        private userRepo: UserRepository
+    ) { }
+
+    /**
+     * Calculates the current daily load status
+     */
+    async calculateDailyLoad(userId: number): Promise<LoadStatus> {
+        const user = await this.userRepo.findById(userId);
+        if (!user) throw new Error('User not found');
+
+        const demandMinutes = await this.taskRepo.sumPendingEstimatedMinutes(userId);
+
+        // Calculate Capacity
+        const now = new Date();
+        const [endHour, endMinute] = user.workEndTime.split(':').map(Number);
+
+        const workEndTime = new Date(now);
+        workEndTime.setHours(endHour, endMinute, 0, 0);
+
+        let remainingMinutes = (workEndTime.getTime() - now.getTime()) / 60000;
+
+        // If outside work hours or negative, capacity is 0 (or handle overtime?)
+        if (remainingMinutes < 0) remainingMinutes = 0;
+
+        // Apply 20% safety margin
+        const capacityMinutes = Math.floor(remainingMinutes * 0.8);
+
+        const overloadRatio = capacityMinutes > 0 ? demandMinutes / capacityMinutes : (demandMinutes > 0 ? Infinity : 0);
+
+        return {
+            capacityMinutes,
+            demandMinutes,
+            isOverloaded: demandMinutes > capacityMinutes,
+            overloadRatio
+        };
+    }
+
+    /**
+     * Checks simply if overloaded and returns boolean (trigger helper)
+     */
+    async checkOverload(userId: number): Promise<boolean> {
+        const status = await this.calculateDailyLoad(userId);
+        return status.isOverloaded;
+    }
+
+    /**
+     * Executes bankruptcy liquidation strategy
+     */
+    async executeBankruptcy(userId: number, option: BankruptcyOption): Promise<string> {
+        switch (option) {
+            case BankruptcyOption.HARD:
+                const archivedCount = await this.taskRepo.archiveLowPriorityTasks(userId, 5); // MetaScore < 5
+                return `🔥 **Liquidación Total**: Se han archivado ${archivedCount} tareas de baja prioridad.`;
+
+            case BankruptcyOption.SOFT:
+                const movedCount = await this.taskRepo.rescheduleTasksToTomorrow(userId);
+                return `🍃 **Reajuste Suave**: Se han movido ${movedCount} tareas a la cola general (sin hora fija).`;
+
+            case BankruptcyOption.MANUAL:
+                return `🛠 **Manual**: Usa /done [id] o /archive [id] para eliminar tareas específicas.`;
+
+            default:
+                return "Opción desconocida.";
+        }
+    }
 
     /**
      * Generates a daily plan based on pending tasks priority
