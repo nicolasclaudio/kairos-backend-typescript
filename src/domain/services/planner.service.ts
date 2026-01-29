@@ -55,8 +55,7 @@ export class PlannerService {
      * Creates a markdown schedule with time blocks
      */
     private formatSchedule(tasks: TaskWithGoal[]): string {
-        // Start planning from "Now" (rounded to next 5 minutes for clean start?)
-        // For simplicity V1: Start exactly now.
+        // Start planning from "Now"
         let currentTime = new Date();
 
         let output = `📅 *Plan Optimizado* (Generado: ${currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})\n\n`;
@@ -71,12 +70,12 @@ export class PlannerService {
             const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-            // Format: 09:00 - 09:30: Tarea
+            // Format: 09:00 - 09:30: [ID: 15] Tarea
             output += `⏰ *${startStr} - ${endStr}* (${duration}m)\n`;
             // Strategic Context Icon based on MetaScore
             const icon = task.goalMetaScore >= 8 ? '🌟' : (task.goalMetaScore >= 5 ? '🎯' : '📝');
 
-            output += `${icon} *${task.title}*\n`;
+            output += `${icon} *[#${task.id}] ${task.title}*\n`;
             output += `   └ 🔗 Meta: _${task.goalTitle || 'Sin Asignar'}_\n`;
             output += `\n`;
 

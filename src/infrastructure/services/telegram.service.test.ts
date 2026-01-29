@@ -12,10 +12,15 @@ const mockUserRepo = {
 const mockGoalRepo = {
     create: vi.fn(),
     findByUserId: vi.fn(),
+    archive: vi.fn(),
 } as any;
 
 const mockTaskRepo = {
     create: vi.fn(),
+    markAsDone: vi.fn(),
+    getDailyStats: vi.fn(),
+    getTotalRemainingMinutes: vi.fn(),
+    countPendingByGoalId: vi.fn(),
 } as any;
 
 const mockPlannerService = {
@@ -150,5 +155,39 @@ describe('TelegramService', () => {
         expect(mockTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
             goalId: 51
         }));
+    });
+
+    it('should mark task as done with /done command', async () => {
+        service.initialize();
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockTaskRepo.markAsDone.mockResolvedValue(true);
+
+        await simulateMessage('/done 123');
+
+        expect(mockTaskRepo.markAsDone).toHaveBeenCalledWith(123, 1);
+        expect(mockBot.sendMessage).toHaveBeenCalledWith(
+            999,
+            expect.stringContaining('marcada como completada'),
+            expect.any(Object)
+        );
+    });
+
+    it('should generate status report with /status command', async () => {
+        service.initialize();
+        mockUserRepo.findByTelegramId.mockResolvedValue({ id: 1 });
+        mockGoalRepo.findByUserId.mockResolvedValue([
+            { id: 10, title: 'Goal 1', metaScore: 10, status: 'active' }
+        ]);
+        mockTaskRepo.getDailyStats.mockResolvedValue({ completed: 5 });
+        mockTaskRepo.getTotalRemainingMinutes.mockResolvedValue(120);
+        mockTaskRepo.countPendingByGoalId.mockResolvedValue(2);
+
+        await simulateMessage('/status');
+
+        expect(mockBot.sendMessage).toHaveBeenCalledWith(
+            999,
+            expect.stringContaining('Estado del Proyecto'),
+            expect.any(Object)
+        );
     });
 });

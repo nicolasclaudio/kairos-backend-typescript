@@ -65,6 +65,18 @@ export class GoalRepository implements IGoalRepository {
     }
 
     /**
+     * Archive a goal
+     */
+    async archive(goalId: number): Promise<void> {
+        const sql = `
+            UPDATE goals
+            SET status = 'archived'
+            WHERE id = $1
+        `;
+        await query(sql, [goalId]);
+    }
+
+    /**
      * Map database row (snake_case) to Goal entity (camelCase)
      * @param row Database row
      * @returns Goal entity
