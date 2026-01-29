@@ -12,6 +12,7 @@ export interface User {
     workStartTime: string; // HH:mm
     workEndTime: string;   // HH:mm
     initialVelocityMultiplier: number;
+    currentEnergy: number;
 }
 
 export interface Goal {
@@ -33,6 +34,7 @@ export interface Task {
     status: 'pending' | 'in_progress' | 'done' | 'archived';
     priorityOverride?: number;
     isFixed: boolean;
+    requiredEnergy: number;
     createdAt?: Date | string;
     scheduledStartTime?: Date;
 }

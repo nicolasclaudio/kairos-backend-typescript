@@ -57,6 +57,25 @@ export class TaskRepository implements ITaskRepository {
     }
 
     /**
+     * Find all pending tasks for a user including goal info
+     */
+    async findAllPendingWithGoalInfo(userId: number): Promise<any[]> {
+        const sql = `
+            SELECT t.*, g.title as goal_title, g.meta_score
+            FROM tasks t
+            LEFT JOIN goals g ON t.goal_id = g.id
+            WHERE t.user_id = $1 AND t.status = 'pending'
+        `;
+
+        const result = await query(sql, [userId]);
+        return result.rows.map(row => ({
+            ...this.mapRowToTask(row),
+            goalTitle: row.goal_title,
+            goalMetaScore: row.meta_score || 0
+        }));
+    }
+
+    /**
      * Find all tasks for a specific goal
      * @param goalId Goal ID
      * @returns Array of tasks for the goal
@@ -106,8 +125,58 @@ export class TaskRepository implements ITaskRepository {
             status: row.status,
             priorityOverride: row.priority_override,
             isFixed: row.is_fixed,
+            requiredEnergy: row.required_energy || 3,
             createdAt: row.created_at,
             scheduledStartTime: row.scheduled_start_time,
         };
+    }
+
+    /**
+     * Mark a task as done
+     */
+    async markAsDone(taskId: number, userId: number): Promise<boolean> {
+        const sql = `
+            UPDATE tasks
+            SET status = 'done'
+            WHERE id = $1 AND user_id = $2
+            RETURNING id
+        `;
+
+        const result = await query(sql, [taskId, userId]);
+        return (result.rowCount || 0) > 0;
+    }
+
+    /**
+     * Count pending tasks for a goal
+     */
+    async countPendingByGoalId(goalId: number): Promise<number> {
+        const sql = `
+            SELECT COUNT(*) as count FROM tasks
+            WHERE goal_id = $1 AND status = 'pending'
+        `;
+        const result = await query(sql, [goalId]);
+        return parseInt(result.rows[0].count, 10);
+    }
+
+    async getDailyStats(userId: number): Promise<{ completed: number }> {
+        const sql = `
+            SELECT COUNT(*) as count FROM tasks
+            WHERE user_id = $1 
+            AND status = 'done' 
+            AND updated_at::date = CURRENT_DATE
+        `;
+
+        const result = await query(sql, [userId]);
+        return { completed: parseInt(result.rows[0].count, 10) || 0 };
+    }
+
+    async getTotalRemainingMinutes(userId: number): Promise<number> {
+        const sql = `
+            SELECT COALESCE(SUM(estimated_minutes), 0) as total
+            FROM tasks
+            WHERE user_id = $1 AND status = 'pending'
+        `;
+        const result = await query(sql, [userId]);
+        return parseInt(result.rows[0].total, 10) || 0;
     }
 }

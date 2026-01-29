@@ -9,6 +9,7 @@ import { query } from '../../config/database.js';
 export interface IUserRepository {
     create(user: Omit<User, 'id'>): Promise<User>;
     findByTelegramId(telegramId: string): Promise<User | null>;
+    updateEnergy(userId: number, energy: number): Promise<void>;
 }
 
 export class UserRepository implements IUserRepository {
@@ -25,9 +26,10 @@ export class UserRepository implements IUserRepository {
         timezone,
         work_start_time,
         work_end_time,
-        initial_velocity_multiplier
+        initial_velocity_multiplier,
+        current_energy
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `;
 
@@ -38,6 +40,7 @@ export class UserRepository implements IUserRepository {
             user.workStartTime,
             user.workEndTime,
             user.initialVelocityMultiplier,
+            user.currentEnergy || 3
         ];
 
         const result = await query(sql, values);
@@ -69,6 +72,11 @@ export class UserRepository implements IUserRepository {
         return this.mapRowToUser(result.rows[0]);
     }
 
+    async updateEnergy(userId: number, energy: number): Promise<void> {
+        const sql = `UPDATE users SET current_energy = $1 WHERE id = $2`;
+        await query(sql, [energy, userId]);
+    }
+
     /**
      * Map database row (snake_case) to User entity (camelCase)
      * @param row Database row
@@ -83,6 +91,7 @@ export class UserRepository implements IUserRepository {
             workStartTime: row.work_start_time,
             workEndTime: row.work_end_time,
             initialVelocityMultiplier: parseFloat(row.initial_velocity_multiplier),
+            currentEnergy: row.current_energy || 3 // Default fallback
         };
     }
 }
