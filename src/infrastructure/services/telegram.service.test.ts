@@ -31,6 +31,10 @@ const mockPlannerService = {
     executeBankruptcy: vi.fn(),
 } as any;
 
+const mockAnalyticsService = {
+    getWeeklyStats: vi.fn().mockResolvedValue({ velocity: 50, impactScore: 80, streak: 5 }),
+} as any;
+
 const mockLlmService = {
     extractTaskDetails: vi.fn(),
 } as any;
@@ -52,7 +56,15 @@ describe('TelegramService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        service = new TelegramService('fake-token', mockUserRepo, mockGoalRepo, mockTaskRepo, mockPlannerService, mockLlmService);
+        service = new TelegramService(
+            'fake-token',
+            mockUserRepo,
+            mockGoalRepo,
+            mockTaskRepo,
+            mockPlannerService,
+            mockLlmService,
+            mockAnalyticsService
+        );
         mockBot = (service as any).bot;
     });
 
@@ -191,7 +203,7 @@ describe('TelegramService', () => {
 
         expect(mockBot.sendMessage).toHaveBeenCalledWith(
             999,
-            expect.stringContaining('Status'),
+            expect.stringContaining('Tablero de Mando'),
             expect.any(Object)
         );
     });
