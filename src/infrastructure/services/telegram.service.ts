@@ -7,31 +7,28 @@ import TelegramBot from 'node-telegram-bot-api';
 import { UserRepository } from '../repositories/user.repository.js';
 import { GoalRepository } from '../repositories/goal.repository.js';
 import { TaskRepository } from '../repositories/task.repository.js';
-import { PlannerService } from '../../domain/services/planner.service.js';
+import { LlmService, TaskExtraction } from './llm.service.js';
 
 export class TelegramService {
     private bot: TelegramBot;
+    // Simple in-memory storage for pending task creation (User ID -> Task Draft)
+    private pendingTasks: Map<number, TaskExtraction> = new Map();
 
     constructor(
         private token: string,
         private userRepo: UserRepository,
         private goalRepo: GoalRepository,
         private taskRepo: TaskRepository,
-        private plannerService: PlannerService
+        private llmService: LlmService
     ) {
-        // Basic polling for development
         this.bot = new TelegramBot(token, { polling: true });
     }
 
-    /**
-     * Initialize bot listeners
-     */
     initialize(): void {
         console.log('🤖 Telegram Bot Service Initialized');
 
-        // Handle all text messages
+        // Text Messages
         this.bot.on('message', async (msg) => {
-            // Ignore non-text messages
             if (!msg.text || !msg.from) return;
 
             const chatId = msg.chat.id;
@@ -39,260 +36,146 @@ export class TelegramService {
             const text = msg.text.trim();
 
             try {
-                // 1. Authenticate User
                 const user = await this.userRepo.findByTelegramId(telegramId);
 
                 if (!user) {
-                    await this.bot.sendMessage(
-                        chatId,
-                        `⚠️ Usuario no registrado. Tu Telegram ID es: \`${telegramId}\`.\nPor favor regístrate en el sistema.`
-                        , { parse_mode: 'Markdown' });
+                    await this.bot.sendMessage(chatId, `⚠️ Usuario no registrado. ID: \`${telegramId}\``, { parse_mode: 'Markdown' });
                     return;
                 }
 
-                // 2. Parse Commands
-                if (text.startsWith('/meta')) {
-                    await this.handleMetaCommand(chatId, user.id, text);
-                } else if (text.startsWith('/todo')) {
-                    await this.handleTodoCommand(chatId, user.id, text);
-                } else if (text.startsWith('/plan')) {
-                    await this.handlePlanCommand(chatId, user.id, user.currentEnergy);
-                } else if (text.startsWith('/energy')) {
-                    await this.handleEnergyCommand(chatId, user.id, text);
-                } else if (text.startsWith('/done')) {
-                    await this.handleDoneCommand(chatId, user.id, text);
-                } else if (text.startsWith('/status')) {
-                    await this.handleStatusCommand(chatId, user.id);
-                } else if (text.startsWith('/archive')) {
-                    await this.handleArchiveCommand(chatId, user.id, text);
-                } else if (text.startsWith('/start')) {
-                    await this.bot.sendMessage(chatId, `👋 Hola ${user.username || 'Viajero'}! Estoy listo para capturar tus metas y tareas.`);
+                if (text.startsWith('/')) {
+                    if (text.startsWith('/meta')) await this.handleMetaCommand(chatId, user.id, text);
+                    else if (text.startsWith('/todo')) await this.handleTodoCommand(chatId, user.id, text);
+                    else if (text.startsWith('/start')) await this.bot.sendMessage(chatId, `👋 Hola ${user.username || 'Viajero'}!`);
+                    else await this.bot.sendMessage(chatId, `🤔 Comando desconocido.`);
                 } else {
-                    await this.bot.sendMessage(chatId,
-                        `🤔 No entendí ese comando. Comandos disponibles:\n` +
-                        `/meta [título] - Crear Meta\n` +
-                        `/todo [título] - Crear Tarea\n` +
-                        `/plan - Generar Itinerario\n` +
-                        `/done [id] - Completar Tarea\n` +
-                        `/plan - Generar Itinerario\n` +
-                        `/done [id] - Completar Tarea\n` +
-                        `/status - Ver Progreso\n` +
-                        `/energy [1-5] - Actualizar energía`
-                    );
+                    // LLM Processing
+                    await this.handleNaturalLanguage(chatId, user, text);
                 }
 
             } catch (error) {
-                console.error('Error handling Telegram message:', error);
-                await this.bot.sendMessage(chatId, '❌ Ocurrió un error procesando tu mensaje.');
+                console.error('Error handling message:', error);
+                await this.bot.sendMessage(chatId, '❌ Error procesando mensaje.');
             }
         });
 
-        // Error handling
-        this.bot.on('polling_error', (error) => {
-            console.error('Telegram Polling Error:', error.message);
+        // Callback Queries (Buttons)
+        this.bot.on('callback_query', async (query) => {
+            if (!query.data || !query.message || !query.from) return;
+
+            const chatId = query.message.chat.id;
+            const telegramId = query.from.id.toString();
+
+            try {
+                const user = await this.userRepo.findByTelegramId(telegramId);
+                if (!user) return;
+
+                if (query.data.startsWith('goal:')) {
+                    const goalId = parseInt(query.data.split(':')[1]);
+                    await this.handleGoalSelection(chatId, user.id, goalId);
+
+                    // Answer callback to remove loading state
+                    await this.bot.answerCallbackQuery(query.id);
+                }
+            } catch (error) {
+                console.error('Error handling callback:', error);
+            }
         });
     }
 
-    /**
-     * Handle /meta command
-     */
-    private async handleMetaCommand(chatId: number, userId: number, text: string): Promise<void> {
-        const title = text.replace('/meta', '').trim();
-
-        if (!title) {
-            await this.bot.sendMessage(chatId, '⚠️ Por favor escribe el título de la meta.\nEjemplo: `/meta Aprender Rust`', { parse_mode: 'Markdown' });
-            return;
-        }
+    private async handleNaturalLanguage(chatId: number, user: any, text: string): Promise<void> {
+        await this.bot.sendChatAction(chatId, 'typing');
 
         try {
-            const goal = await this.goalRepo.create({
-                userId,
-                title,
-                metaScore: 5, // Default medium priority for quick capture
-                status: 'active'
-            });
+            const goals = await this.goalRepo.findByUserId(user.id);
+            const extraction = await this.llmService.extractTaskDetails(text, goals);
 
-            await this.bot.sendMessage(chatId, `✅ Meta registrada con éxito:\n*${goal.title}*`, { parse_mode: 'Markdown' });
-        } catch (error) {
-            console.error('Error creating goal via Telegram:', error);
-            await this.bot.sendMessage(chatId, '❌ Error al crear la meta.');
-        }
-    }
+            let targetGoalId: number | null = null;
+            let goalTitle = 'Inbox';
 
-    /**
-     * Handle /todo command
-     */
-    private async handleTodoCommand(chatId: number, userId: number, text: string): Promise<void> {
-        const title = text.replace('/todo', '').trim();
-
-        if (!title) {
-            await this.bot.sendMessage(chatId, '⚠️ Por favor escribe el título de la tarea.\nEjemplo: `/todo Configurar CI/CD`', { parse_mode: 'Markdown' });
-            return;
-        }
-
-        try {
-            // Find "Inbox" goal or create it
-            const userGoals = await this.goalRepo.findByUserId(userId);
-            let inboxGoal = userGoals.find(g => g.title.toLowerCase() === 'inbox');
-
-            if (!inboxGoal) {
-                inboxGoal = await this.goalRepo.create({
-                    userId,
-                    title: 'Inbox',
-                    metaScore: 1, // Low priority container
-                    status: 'active'
-                });
-            }
-
-            const task = await this.taskRepo.create({
-                userId,
-                goalId: inboxGoal.id,
-                title,
-                estimatedMinutes: 30, // Default duration
-                status: 'pending',
-                priorityOverride: 3,
-                isFixed: false,
-                requiredEnergy: 3
-            });
-
-            await this.bot.sendMessage(chatId, `✅ Tarea registrada en *Inbox*:\n*${task.title}*`, { parse_mode: 'Markdown' });
-        } catch (error) {
-            console.error('Error creating task via Telegram:', error);
-            await this.bot.sendMessage(chatId, '❌ Error al crear la tarea.');
-        }
-    }
-
-    /**
-     * Handle /plan command
-     */
-    private async handlePlanCommand(chatId: number, userId: number, userEnergy: number): Promise<void> {
-        try {
-            await this.bot.sendMessage(chatId, '⏳ Generando tu plan óptimo...');
-
-            const plan = await this.plannerService.generateDailyPlan(userId, userEnergy);
-
-            await this.bot.sendMessage(chatId, plan, { parse_mode: 'Markdown' });
-        } catch (error) {
-            console.error('Error generating plan via Telegram:', error);
-            await this.bot.sendMessage(chatId, '❌ Error al generar el plan.');
-        }
-    }
-
-    /**
-     * Handle /energy command
-     */
-    private async handleEnergyCommand(chatId: number, userId: number, text: string): Promise<void> {
-        const levelStr = text.replace('/energy', '').trim();
-        const level = parseInt(levelStr, 10);
-
-        if (isNaN(level) || level < 1 || level > 5) {
-            await this.bot.sendMessage(chatId, '⚠️ Por favor indica un nivel de 1 (Bajo) a 5 (Alto).\nEj: `/energy 4`', { parse_mode: 'Markdown' });
-            return;
-        }
-
-        try {
-            await this.userRepo.updateEnergy(userId, level);
-            await this.bot.sendMessage(chatId, `⚡ Energía actualizada a *${level}*.\n¿Quieres reajustar tu plan? Usa /plan`, { parse_mode: 'Markdown' });
-        } catch (error) {
-            console.error('Error updating energy:', error);
-            await this.bot.sendMessage(chatId, '❌ Error al actualizar energía.');
-        }
-    }
-
-    /**
-     * Handle /done [id] command
-     */
-    private async handleDoneCommand(chatId: number, userId: number, text: string): Promise<void> {
-        const taskIdStr = text.replace('/done', '').trim();
-        const taskId = parseInt(taskIdStr, 10);
-
-        if (isNaN(taskId)) {
-            await this.bot.sendMessage(chatId, '⚠️ Por favor indica el ID de la tarea.\nEjemplo: `/done 15`', { parse_mode: 'Markdown' });
-            return;
-        }
-
-        try {
-            // 1. Get task to know goalId before marking done (optional, but good for context output)
-            // But we don't have findById in repo yet (lazy). Let's trust markAsDone for now.
-
-            // Actually, to check goal completion, we might want to know the goalId.
-            // But markAsDone only returns boolean.
-            // Let's implement robustly: markAsDone first.
-
-            const success = await this.taskRepo.markAsDone(taskId, userId);
-
-            if (!success) {
-                await this.bot.sendMessage(chatId, `❌ No se encontró la tarea #${taskId} o no te pertenece.`);
-                return;
-            }
-
-            await this.bot.sendMessage(chatId, `✅ Tarea *#${taskId}* marcada como completada.`, { parse_mode: 'Markdown' });
-
-            // TODO: In future, check if goal is empty and suggest archive.
-            // For V1, simple done is enough.
-
-        } catch (error) {
-            console.error('Error marking task as done:', error);
-            await this.bot.sendMessage(chatId, '❌ Error al actualizar la tarea.');
-        }
-    }
-
-    /**
-     * Handle /status command
-     */
-    private async handleStatusCommand(chatId: number, userId: number): Promise<void> {
-        try {
-            const goals = await this.goalRepo.findByUserId(userId);
-            const activeGoals = goals.filter(g => g.status === 'active');
-
-            const dailyStats = await this.taskRepo.getDailyStats(userId);
-            const remainingMinutes = await this.taskRepo.getTotalRemainingMinutes(userId);
-
-            const hours = Math.floor(remainingMinutes / 60);
-            const mins = remainingMinutes % 60;
-
-            let report = `📊 *Estado del Proyecto*\n\n`;
-
-            report += `📈 *Progreso Diario*\n`;
-            report += `   ✅ Completadas hoy: ${dailyStats.completed}\n`;
-            report += `   ⏳ Carga Restante: ${hours}h ${mins}m\n\n`;
-
-            report += `🎯 *Metas Activas (${activeGoals.length})*\n`;
-
-            for (const goal of activeGoals) {
-                const pendingCount = await this.taskRepo.countPendingByGoalId(goal.id);
-                if (pendingCount > 0) {
-                    report += `   🔹 ${goal.title} (Score: ${goal.metaScore}) - ${pendingCount} pendientes\n`;
-                } else {
-                    report += `   ✨ ${goal.title} (¡Completa!) - Usa \`/archive ${goal.id}\`\n`;
+            if (extraction.goalName) {
+                const goal = goals.find(g => g.title.toLowerCase() === extraction.goalName?.toLowerCase());
+                if (goal) {
+                    targetGoalId = goal.id;
+                    goalTitle = goal.title;
                 }
             }
 
-            await this.bot.sendMessage(chatId, report, { parse_mode: 'Markdown' });
+            // If confident, create immediately
+            if (targetGoalId) {
+                await this.createTaskFromExtraction(chatId, user.id, targetGoalId, goalTitle, extraction);
+            } else {
+                // Ambiguity: Ask user
+                this.pendingTasks.set(user.id, extraction);
+
+                // Keyboard
+                const buttons = goals.map(g => ([{ text: g.title, callback_data: `goal:${g.id}` }]));
+                // Add Create New Option? For now just existing goals + Inbox if exists
+
+                await this.bot.sendMessage(chatId, `🧠 Entendido: "${extraction.title}".\n¿A qué meta corresponde?`, {
+                    reply_markup: { inline_keyboard: buttons }
+                });
+            }
 
         } catch (error) {
-            console.error('Error getting status:', error);
-            await this.bot.sendMessage(chatId, '❌ Error al obtener el estado.');
+            console.error('LLM Error:', error);
+            await this.bot.sendMessage(chatId, '😵 Mi mente sintética falló. Intenta de nuevo.');
         }
     }
 
-    /**
-     * Handle /archive [id] command
-     */
-    private async handleArchiveCommand(chatId: number, userId: number, text: string): Promise<void> {
-        const goalIdStr = text.replace('/archive', '').trim();
-        const goalId = parseInt(goalIdStr, 10);
-
-        if (isNaN(goalId)) {
-            await this.bot.sendMessage(chatId, '⚠️ ID de meta inválido.');
+    private async handleGoalSelection(chatId: number, userId: number, goalId: number): Promise<void> {
+        const draft = this.pendingTasks.get(userId);
+        if (!draft) {
+            await this.bot.sendMessage(chatId, '⚠️ La sesión ha expirado. Escribe la tarea de nuevo.');
             return;
         }
 
-        try {
-            await this.goalRepo.archive(goalId);
-            await this.bot.sendMessage(chatId, `📦 Meta #${goalId} archivada.`);
-        } catch (error) {
-            await this.bot.sendMessage(chatId, '❌ Error al archivar.');
+        const goals = await this.goalRepo.findByUserId(userId);
+        const goal = goals.find(g => g.id === goalId);
+
+        if (goal) {
+            await this.createTaskFromExtraction(chatId, userId, goal.id, goal.title, draft);
+            this.pendingTasks.delete(userId);
         }
+    }
+
+    private async createTaskFromExtraction(chatId: number, userId: number, goalId: number, goalTitle: string, data: TaskExtraction) {
+        const task = await this.taskRepo.create({
+            userId,
+            goalId,
+            title: data.title,
+            estimatedMinutes: data.estimatedMinutes,
+            status: 'pending',
+            priorityOverride: 3,
+            isFixed: data.isFixed,
+            scheduledStartTime: data.scheduledStartTime ? new Date(data.scheduledStartTime) : undefined
+        });
+
+        const timeInfo = task.scheduledStartTime
+            ? `\n📅 *${task.scheduledStartTime.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}*`
+            : '';
+
+        await this.bot.sendMessage(chatId,
+            `✅ Tarea guardada en *${goalTitle}*:\n📝 *${task.title}* (${task.estimatedMinutes}m)${timeInfo}`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+
+    // Legacy Commands Handlers
+    private async handleMetaCommand(chatId: number, userId: number, text: string): Promise<void> {
+        const title = text.replace('/meta', '').trim();
+        if (!title) { await this.bot.sendMessage(chatId, 'Falta título'); return; }
+        await this.goalRepo.create({ userId, title, metaScore: 5, status: 'active' });
+        await this.bot.sendMessage(chatId, `✅ Meta creada: ${title}`);
+    }
+
+    private async handleTodoCommand(chatId: number, userId: number, text: string): Promise<void> {
+        const title = text.replace('/todo', '').trim();
+        if (!title) { await this.bot.sendMessage(chatId, 'Falta título'); return; }
+        const goals = await this.goalRepo.findByUserId(userId);
+        let inbox = goals.find(g => g.title === 'Inbox');
+        if (!inbox) inbox = await this.goalRepo.create({ userId, title: 'Inbox', metaScore: 1, status: 'active' });
+        await this.taskRepo.create({ userId, goalId: inbox.id, title, estimatedMinutes: 30, isFixed: false, status: 'pending' });
+        await this.bot.sendMessage(chatId, `✅ Tarea en Inbox: ${title}`);
     }
 }

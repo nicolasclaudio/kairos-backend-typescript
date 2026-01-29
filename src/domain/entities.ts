@@ -36,5 +36,6 @@ export interface Task {
     isFixed: boolean;
     requiredEnergy: number;
     createdAt?: Date | string;
+    scheduledStartTime?: Date;
 }
 

@@ -29,7 +29,7 @@ export class TaskRepository implements ITaskRepository {
         status,
         priority_override,
         is_fixed,
-        required_energy
+        scheduled_start_time
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
@@ -44,7 +44,7 @@ export class TaskRepository implements ITaskRepository {
             task.status || 'pending',
             task.priorityOverride || 3,
             task.isFixed || false,
-            task.requiredEnergy || 3,
+            task.scheduledStartTime || null
         ];
 
         const result = await query(sql, values);
@@ -127,6 +127,7 @@ export class TaskRepository implements ITaskRepository {
             isFixed: row.is_fixed,
             requiredEnergy: row.required_energy || 3,
             createdAt: row.created_at,
+            scheduledStartTime: row.scheduled_start_time,
         };
     }
 
