@@ -126,4 +126,53 @@ export class TaskRepository implements ITaskRepository {
             createdAt: row.created_at,
         };
     }
+
+    /**
+     * Mark a task as done
+     */
+    async markAsDone(taskId: number, userId: number): Promise<boolean> {
+        const sql = `
+            UPDATE tasks
+            SET status = 'done'
+            WHERE id = $1 AND user_id = $2
+            RETURNING id
+        `;
+
+        const result = await query(sql, [taskId, userId]);
+        return (result.rowCount || 0) > 0;
+    }
+
+    /**
+     * Count pending tasks for a goal
+     */
+    async countPendingByGoalId(goalId: number): Promise<number> {
+        const sql = `
+            SELECT COUNT(*) as count FROM tasks
+            WHERE goal_id = $1 AND status = 'pending'
+        `;
+        const result = await query(sql, [goalId]);
+        return parseInt(result.rows[0].count, 10);
+    }
+
+    async getDailyStats(userId: number): Promise<{ completed: number }> {
+        const sql = `
+            SELECT COUNT(*) as count FROM tasks
+            WHERE user_id = $1 
+            AND status = 'done' 
+            AND updated_at::date = CURRENT_DATE
+        `;
+
+        const result = await query(sql, [userId]);
+        return { completed: parseInt(result.rows[0].count, 10) || 0 };
+    }
+
+    async getTotalRemainingMinutes(userId: number): Promise<number> {
+        const sql = `
+            SELECT COALESCE(SUM(estimated_minutes), 0) as total
+            FROM tasks
+            WHERE user_id = $1 AND status = 'pending'
+        `;
+        const result = await query(sql, [userId]);
+        return parseInt(result.rows[0].total, 10) || 0;
+    }
 }
