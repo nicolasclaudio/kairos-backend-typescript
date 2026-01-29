@@ -131,3 +131,64 @@ export function validateGoalCreation(
 
     next();
 }
+
+/**
+ * Validate task creation request
+ */
+export function validateTaskCreation(
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void {
+    const { userId, goalId, title, estimatedMinutes } = req.body;
+
+    // Required fields
+    if (!userId) {
+        res.status(400).json({ error: 'userId is required' });
+        return;
+    }
+
+    if (!goalId) {
+        res.status(400).json({ error: 'goalId is required' });
+        return;
+    }
+
+    if (!title) {
+        res.status(400).json({ error: 'title is required' });
+        return;
+    }
+
+    if (estimatedMinutes === undefined) {
+        res.status(400).json({ error: 'estimatedMinutes is required' });
+        return;
+    }
+
+    // Type validations
+    if (typeof userId !== 'number') {
+        res.status(400).json({ error: 'userId must be a number' });
+        return;
+    }
+
+    if (typeof goalId !== 'number') {
+        res.status(400).json({ error: 'goalId must be a number' });
+        return;
+    }
+
+    if (typeof title !== 'string') {
+        res.status(400).json({ error: 'title must be a string' });
+        return;
+    }
+
+    if (typeof estimatedMinutes !== 'number') {
+        res.status(400).json({ error: 'estimatedMinutes must be a number' });
+        return;
+    }
+
+    // Value validation
+    if (estimatedMinutes <= 0) {
+        res.status(400).json({ error: 'estimatedMinutes must be greater than 0' });
+        return;
+    }
+
+    next();
+}
