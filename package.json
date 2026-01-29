@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "@types/node-telegram-bot-api": "^0.64.13",
     "@types/pg": "^8.16.0",
     "@vitest/ui": "^4.0.18",
     "husky": "^9.1.7",
@@ -40,6 +41,7 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "node-telegram-bot-api": "^0.67.0",
     "pg": "^8.17.2"
   }
 }
