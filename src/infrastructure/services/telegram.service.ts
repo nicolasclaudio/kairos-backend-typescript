@@ -9,6 +9,7 @@ import { GoalRepository } from '../repositories/goal.repository.js';
 import { TaskRepository } from '../repositories/task.repository.js';
 import { PlannerService } from '../../domain/services/planner.service.js';
 import { LlmService, TaskExtraction } from './llm.service.js';
+import { AnalyticsService } from '../../domain/services/analytics.service.js';
 import { BankruptcyOption } from '../../domain/entities.js';
 
 export class TelegramService {
@@ -22,7 +23,8 @@ export class TelegramService {
         private goalRepo: GoalRepository,
         private taskRepo: TaskRepository,
         private plannerService: PlannerService,
-        private llmService: LlmService
+        private llmService: LlmService,
+        private analyticsService: AnalyticsService
     ) {
         this.bot = new TelegramBot(token, { polling: true });
     }
@@ -222,11 +224,24 @@ export class TelegramService {
      */
     private async checkAndTriggerBankruptcy(chatId: number, userId: number): Promise<void> {
         const load = await this.plannerService.calculateDailyLoad(userId);
+        const weeklyStats = await this.analyticsService.getWeeklyStats(userId);
+
+        let msg = '';
+
+        // 1. Check Velocity Mismatch (Over-planning)
+        // If Demand > Velocity * 1.2 (20% tolerance) AND not yet bankrupt level?
+        // Or just an advice? "Oye, planeaste 300m pero tu velocidad es 200m."
+        if (weeklyStats.velocity > 0 && load.demandMinutes > weeklyStats.velocity * 1.1) {
+            const diff = load.demandMinutes - weeklyStats.velocity;
+            msg += `🐢 **Alerta de Realidad**: Planeaste ${load.demandMinutes}m, pero tu velocidad real es ${weeklyStats.velocity}m.\n` +
+                `Estás excedido por **${diff}m** basado en tu histórico.\n\n`;
+        }
+
         if (load.isOverloaded) {
             const demandHours = (load.demandMinutes / 60).toFixed(1);
             const capacityHours = (load.capacityMinutes / 60).toFixed(1);
 
-            const msg = `⚠️ **ALERTA DE BANCARROTA TÉCNICA** ⚠️\n\n` +
+            msg += `⚠️ **ALERTA DE BANCARROTA TÉCNICA** ⚠️\n` +
                 `🔥 Tienes **${demandHours}h** de tareas para **${capacityHours}h** de energía real.\n` +
                 `El plan actual es imposible. ¿Qué hacemos?`;
 
@@ -239,6 +254,9 @@ export class TelegramService {
             };
 
             await this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+        } else if (msg) {
+            // Send just the velocity warning if not bankrupt
+            await this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
         }
     }
 
@@ -276,15 +294,29 @@ export class TelegramService {
         try {
             const goals = await this.goalRepo.findByUserId(userId);
             const active = goals.filter(g => g.status === 'active');
-            const stats = await this.taskRepo.getDailyStats(userId);
+            const dailyStats = await this.taskRepo.getDailyStats(userId);
+            const weeklyStats = await this.analyticsService.getWeeklyStats(userId);
 
-            let msg = `📊 *Status*\n✅ Hoy: ${stats.completed}\n\n`;
+            let msg = `📊 *Tablero de Mando*\n\n`;
+            msg += `🚀 *Velocity (7d)*: ${weeklyStats.velocity} min/día\n`;
+            msg += `🎯 *Impacto*: ${weeklyStats.impactScore}% (Metas > 7)\n`;
+            msg += `✅ *Hoy*: ${dailyStats.completed} tareas\n\n`;
+
+            msg += `*Metas Activas:*\n`;
             for (const g of active) {
                 const count = await this.taskRepo.countPendingByGoalId(g.id);
-                if (count > 0) msg += `🔹 ${g.title}: ${count}\n`;
+                if (count > 0) msg += `🔹 ${g.title}: ${count} pendientes\n`;
             }
+
+            // Suggestion based on velocity (Mocked Logic for now, can be sophisticated)
+            // If we had planned today, we could compare. For now just generic advice if Velocity is low?
+            // "Tip: Tu velocity sugiere que planifiques máx X minutos."
+
             await this.bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
-        } catch (e) { await this.bot.sendMessage(chatId, '❌ Error.'); }
+        } catch (e) {
+            console.error(e);
+            await this.bot.sendMessage(chatId, '❌ Error obteniendo status.');
+        }
     }
 
     /**

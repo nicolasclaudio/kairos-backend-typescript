@@ -37,6 +37,7 @@ export interface Task {
     requiredEnergy: number;
     createdAt?: Date | string;
     scheduledStartTime?: Date;
+    completedAt?: Date;
 }
 
 export enum BankruptcyOption {

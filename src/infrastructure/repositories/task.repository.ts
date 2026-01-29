@@ -14,6 +14,7 @@ export interface ITaskRepository {
     rescheduleTasksToTomorrow(userId: number): Promise<number>;
     archive(taskId: number, userId: number): Promise<boolean>;
     markAsDone(taskId: number, userId: number): Promise<boolean>;
+    getCompletedTasks(userId: number, startDate: Date): Promise<any[]>;
 }
 
 export class TaskRepository implements ITaskRepository {
@@ -132,6 +133,7 @@ export class TaskRepository implements ITaskRepository {
             requiredEnergy: row.required_energy || 3,
             createdAt: row.created_at,
             scheduledStartTime: row.scheduled_start_time,
+            completedAt: row.completed_at,
         };
     }
 
@@ -141,7 +143,7 @@ export class TaskRepository implements ITaskRepository {
     async markAsDone(taskId: number, userId: number): Promise<boolean> {
         const sql = `
             UPDATE tasks
-            SET status = 'done'
+            SET status = 'done', completed_at = NOW()
             WHERE id = $1 AND user_id = $2
             RETURNING id
         `;
@@ -247,5 +249,24 @@ export class TaskRepository implements ITaskRepository {
         `;
         const result = await query(sql, [userId]);
         return result.rowCount || 0;
+    }
+
+    /**
+     * Get completed tasks since a specific date
+     */
+    async getCompletedTasks(userId: number, startDate: Date): Promise<any[]> {
+        const sql = `
+            SELECT t.*, g.meta_score
+            FROM tasks t
+            JOIN goals g ON t.goal_id = g.id
+            WHERE t.user_id = $1 
+            AND t.status = 'done'
+            AND t.completed_at >= $2
+        `;
+        const result = await query(sql, [userId, startDate]);
+        return result.rows.map(row => ({
+            ...this.mapRowToTask(row),
+            goalMetaScore: row.meta_score || 0
+        }));
     }
 }
