@@ -13,6 +13,8 @@ export interface User {
     workEndTime: string;   // HH:mm
     initialVelocityMultiplier: number;
     currentEnergy: number;
+    email?: string;
+    passwordHash?: string;
 }
 
 export interface Goal {

@@ -62,7 +62,7 @@ describe('UserRepository', () => {
 
             expect(query).toHaveBeenCalledWith(
                 expect.stringContaining('INSERT INTO users'),
-                ['123456789', 'test_user', 'America/Mexico_City', '09:00', '18:00', 1.0, 3]
+                ['123456789', 'test_user', 'America/Mexico_City', '09:00', '18:00', 1.0, 3, null, null]
             );
         });
 
@@ -157,7 +157,7 @@ describe('UserRepository', () => {
             // Expect 7 args now
             expect(query).toHaveBeenCalledWith(
                 expect.any(String),
-                expect.arrayContaining(['123', 'user', 'UTC', '09:00', '17:00', 1.5, 4])
+                expect.arrayContaining(['123', 'user', 'UTC', '09:00', '17:00', 1.5, 4, null, null])
             );
 
             // Verify the output was mapped back properly
