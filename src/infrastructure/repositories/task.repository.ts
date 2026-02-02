@@ -13,8 +13,11 @@ export interface ITaskRepository {
     archiveLowPriorityTasks(userId: number, threshold: number): Promise<number>;
     rescheduleTasksToTomorrow(userId: number): Promise<number>;
     archive(taskId: number, userId: number): Promise<boolean>;
+    delete(taskId: number, userId: number): Promise<boolean>;
     markAsDone(taskId: number, userId: number): Promise<boolean>;
     getCompletedTasks(userId: number, startDate: Date): Promise<any[]>;
+    update(taskId: number, userId: number, updates: Partial<Task>): Promise<Task | null>;
+    findAll(userId: number, filters?: { status?: string; priority?: number; goalId?: number }): Promise<Task[]>;
 }
 
 export class TaskRepository implements ITaskRepository {
@@ -268,5 +271,95 @@ export class TaskRepository implements ITaskRepository {
             ...this.mapRowToTask(row),
             goalMetaScore: row.meta_score || 0
         }));
+    }
+
+    /**
+     * Update task fields
+     */
+    async update(taskId: number, userId: number, updates: Partial<Task>): Promise<Task | null> {
+        const allowedUpdates = [
+            'title', 'estimatedMinutes', 'status', 'priorityOverride',
+            'isFixed', 'executedMinutes', 'projectId'
+        ];
+
+        const validUpdates = Object.keys(updates).filter(key => allowedUpdates.includes(key));
+
+        if (validUpdates.length === 0) return null;
+
+        const setClause = validUpdates.map((key, index) => {
+            const dbCol = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            return `${dbCol} = $${index + 3}`;
+        }).join(', ');
+
+        const sql = `
+            UPDATE tasks
+            SET ${setClause}, updated_at = NOW()
+            WHERE id = $1 AND user_id = $2
+            RETURNING *
+        `;
+
+        const values = [taskId, userId, ...validUpdates.map(key => (updates as any)[key])];
+
+        const result = await query(sql, values);
+
+        if (result.rows.length === 0) return null;
+        return this.mapRowToTask(result.rows[0]);
+    }
+
+    /**
+     * Soft delete a task (archive)
+     */
+    async delete(taskId: number, userId: number): Promise<boolean> {
+        return this.archive(taskId, userId);
+    }
+
+    /**
+     * Find all tasks with filters
+     */
+    async findAll(userId: number, filters: { status?: string; priority?: number; goalId?: number } = {}): Promise<Task[]> {
+        let sql = `
+            SELECT t.*, g.meta_score
+            FROM tasks t
+            LEFT JOIN goals g ON t.goal_id = g.id
+            WHERE t.user_id = $1
+        `;
+
+        const params: any[] = [userId];
+        let paramCount = 1;
+
+        if (filters.status) {
+            paramCount++;
+            sql += ` AND t.status = $${paramCount}`;
+            params.push(filters.status);
+        } else {
+            // Default: exclude archived unless specifically requested?
+            // Usually findAll (GET /tasks) should assume pending if no status?
+            // Or return all?
+            // "Refactor de GET /api/tasks: Debe aceptar filtros como ?status=pending".
+            // If no filter, maybe return all NON-ARCHIVED?
+            sql += ` AND t.status != 'archived'`;
+        }
+
+        if (filters.priority) {
+            // Priority logic is complex (MetaScore vs PriorityOverride), 
+            // but user asks for simple filtering.
+            // If priorityOverride exists, use it? Or just filter by override?
+            // "priority=high" might map to a number range or specific override.
+            // For strict filtering:
+            paramCount++;
+            sql += ` AND t.priority_override = $${paramCount}`;
+            params.push(filters.priority);
+        }
+
+        if (filters.goalId) {
+            paramCount++;
+            sql += ` AND t.goal_id = $${paramCount}`;
+            params.push(filters.goalId);
+        }
+
+        sql += ` ORDER BY t.created_at DESC`;
+
+        const result = await query(sql, params);
+        return result.rows.map(row => this.mapRowToTask(row));
     }
 }
