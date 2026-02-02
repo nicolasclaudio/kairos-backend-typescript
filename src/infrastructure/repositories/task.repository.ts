@@ -362,4 +362,19 @@ export class TaskRepository implements ITaskRepository {
         const result = await query(sql, params);
         return result.rows.map(row => this.mapRowToTask(row));
     }
+    /**
+     * Get distinct completion dates for a user
+     */
+    async getCompletionDates(userId: number): Promise<Date[]> {
+        const sql = `
+            SELECT DISTINCT date_trunc('day', completed_at)::date as completion_date
+            FROM tasks
+            WHERE user_id = $1 
+            AND status = 'done'
+            AND completed_at IS NOT NULL
+            ORDER BY completion_date DESC
+        `;
+        const result = await query(sql, [userId]);
+        return result.rows.map(row => new Date(row.completion_date));
+    }
 }
