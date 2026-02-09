@@ -26,6 +26,16 @@ export interface Goal {
     status: 'active' | 'achieved' | 'paused' | 'dropped';
 }
 
+export interface Project {
+    id: number;
+    userId: number;
+    goalId?: number | null;
+    title: string;
+    status: 'active' | 'archived' | 'completed';
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+
 export interface Task {
     id: number;
     userId: number;
