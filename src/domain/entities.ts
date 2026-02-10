@@ -52,6 +52,18 @@ export interface Task {
     completedAt?: Date;
 }
 
+export interface FocusSession {
+    id: number;
+    userId: number;
+    taskId: number;
+    startedAt: Date;
+    completedAt?: Date | null;
+    actualMinutes?: number | null;
+    status: 'active' | 'completed' | 'abandoned';
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+
 export enum BankruptcyOption {
     HARD = 'HARD',
     SOFT = 'SOFT',
