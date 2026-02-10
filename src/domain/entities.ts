@@ -77,3 +77,37 @@ export interface LoadStatus {
     overloadRatio: number; // e.g. 1.5 = 150% load
 }
 
+// Notification types
+export type NotificationType =
+    | 'task_reminder'
+    | 'streak_celebration'
+    | 'low_impact_warning'
+    | 'goal_deadline';
+
+export type RelatedEntityType = 'task' | 'goal' | 'project';
+
+export interface Notification {
+    id: number;
+    userId: number;
+    type: NotificationType;
+    title: string;
+    message: string;
+    relatedEntityType?: RelatedEntityType;
+    relatedEntityId?: number;
+    isRead: boolean;
+    createdAt: Date;
+    readAt?: Date;
+}
+
+export interface NotificationSettings {
+    id: number;
+    userId: number;
+    enableTaskReminders: boolean;
+    enableStreakCelebrations: boolean;
+    enableLowImpactWarnings: boolean;
+    enableGoalDeadlines: boolean;
+    quietHoursStart?: string; // HH:mm format
+    quietHoursEnd?: string;   // HH:mm format
+    createdAt?: Date;
+    updatedAt?: Date;
+}
