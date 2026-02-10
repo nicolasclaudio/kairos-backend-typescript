@@ -6,6 +6,7 @@ import taskRoutes from './api/routes/task.routes.js';
 import authRoutes from './api/routes/auth.routes.js';
 import analyticsRoutes from './api/routes/analytics.routes.js';
 import projectRoutes from './api/routes/project.routes.js';
+import focusSessionRoutes from './api/routes/focus-session.routes.js';
 
 const app: Application = express();
 app.use(express.json());
@@ -17,6 +18,7 @@ app.use('/api', goalRoutes);
 app.use('/api', taskRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/focus-sessions', focusSessionRoutes);
 
 
 // Ruta de salud para verificar que Kairos está en línea
