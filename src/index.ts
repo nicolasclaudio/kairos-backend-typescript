@@ -3,8 +3,10 @@
  * Main application entry point - Bootstraps Database and Express Server
  */
 
+import http from 'http';
 import app from './server.js';
 import { pool } from './config/database.js';
+import { WebSocketService } from './infrastructure/services/websocket.service.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -24,6 +26,12 @@ async function bootstrap() {
     try {
         // Verificar conexión a la base de datos
         await checkDatabaseConnection();
+
+        // Create HTTP server (needed for Socket.IO)
+        const httpServer = http.createServer(app);
+
+        // Initialize WebSocket service
+        WebSocketService.getInstance(httpServer);
 
         // Initializes Telegram Bot if token is present
         const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -49,10 +57,11 @@ async function bootstrap() {
             console.warn('⚠️ TELEGRAM_BOT_TOKEN not found. Telegram bot disabled.');
         }
 
-        // Iniciar servidor Express
-        app.listen(PORT, () => {
+        // Iniciar servidor HTTP (con WebSocket)
+        httpServer.listen(PORT, () => {
             console.log(`🚀 Kairos Core is running on port ${PORT}`);
             console.log(`📍 Health check: http://localhost:${PORT}/health`);
+            console.log(`🔌 WebSocket ready on ws://localhost:${PORT}`);
         });
     } catch (error) {
         console.error('💥 Failed to start Kairos Core:', error);

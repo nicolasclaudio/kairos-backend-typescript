@@ -23,6 +23,16 @@ vi.mock('../../api/middleware/auth.middleware.js', () => ({
     }
 }));
 
+// Mock WebSocketService
+vi.mock('../../infrastructure/services/websocket.service.js', () => ({
+    WebSocketService: {
+        getInstance: vi.fn(() => ({
+            emit: vi.fn(),
+            getStats: vi.fn(() => ({ connections: 0, connectedUsers: [], roomCount: 0 }))
+        }))
+    }
+}));
+
 describe('Task CRUD Routes', () => {
     beforeEach(() => {
         vi.clearAllMocks();

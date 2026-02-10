@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { TaskRepository } from '../../infrastructure/repositories/task.repository.js';
 import { GoalRepository } from '../../infrastructure/repositories/goal.repository.js';
+import { WebSocketService } from '../../infrastructure/services/websocket.service.js';
 
 export class TaskController {
     constructor(
@@ -46,6 +47,16 @@ export class TaskController {
                 isFixed: isFixed || false,
                 requiredEnergy: 3, // Default value
                 createdAt: new Date().toISOString(),
+            });
+
+            // Emit WebSocket event
+            WebSocketService.getInstance().emit({
+                type: 'TASK_UPDATED',
+                userId,
+                payload: {
+                    action: 'created',
+                    task
+                }
             });
 
             // Return 201 Created
@@ -116,6 +127,16 @@ export class TaskController {
                 res.status(404).json({ error: 'Task not found or permission denied' });
                 return;
             }
+
+            // Emit WebSocket event
+            WebSocketService.getInstance().emit({
+                type: 'TASK_UPDATED',
+                userId,
+                payload: {
+                    action: 'updated',
+                    task: updatedTask
+                }
+            });
 
             res.status(200).json(updatedTask);
         } catch (error) {
@@ -213,6 +234,16 @@ export class TaskController {
                 res.status(404).json({ error: 'Task not found' });
                 return;
             }
+
+            // Emit WebSocket event
+            WebSocketService.getInstance().emit({
+                type: 'TASK_UPDATED',
+                userId,
+                payload: {
+                    action: 'deleted',
+                    task: { id: taskId } as any
+                }
+            });
 
             res.status(204).send();
         } catch (error) {
