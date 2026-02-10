@@ -4,7 +4,8 @@
  */
 
 import { Task } from '../../domain/entities.js';
-import { query } from '../../config/database.js';
+import { query, pool } from '../../config/database.js';
+import type { PoolClient } from 'pg';
 
 export interface ITaskRepository {
     create(task: Omit<Task, 'id'>): Promise<Task>;
@@ -18,6 +19,10 @@ export interface ITaskRepository {
     getCompletedTasks(userId: number, startDate: Date): Promise<any[]>;
     update(taskId: number, userId: number, updates: Partial<Task>): Promise<Task | null>;
     findAll(userId: number, filters?: { status?: string; priority?: number; goalId?: number }): Promise<Task[]>;
+    // Batch Operations
+    batchCreate(tasks: Omit<Task, 'id'>[], client?: PoolClient): Promise<Task[]>;
+    batchMarkAsDone(taskIds: number[], userId: number, client?: PoolClient): Promise<number>;
+    batchDelete(taskIds: number[], userId: number, client?: PoolClient): Promise<number>;
 }
 
 export class TaskRepository implements ITaskRepository {
@@ -377,4 +382,187 @@ export class TaskRepository implements ITaskRepository {
         const result = await query(sql, [userId]);
         return result.rows.map(row => new Date(row.completion_date));
     }
+
+    /**
+     * Batch create multiple tasks in a single transaction
+     * @param tasks Array of tasks to create
+     * @param client Optional PoolClient for external transaction management
+     * @returns Array of created tasks with IDs
+     */
+    async batchCreate(tasks: Omit<Task, 'id'>[], client?: PoolClient): Promise<Task[]> {
+        const shouldManageTransaction = !client;
+        const dbClient = client || await pool.connect();
+
+        try {
+            if (shouldManageTransaction) {
+                await dbClient.query('BEGIN');
+            }
+
+            const createdTasks: Task[] = [];
+
+            for (const task of tasks) {
+                const sql = `
+                    INSERT INTO tasks (
+                        user_id,
+                        goal_id,
+                        project_id,
+                        title,
+                        estimated_minutes,
+                        status,
+                        priority_override,
+                        is_fixed,
+                        required_energy,
+                        scheduled_start_time
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    RETURNING *
+                `;
+
+                const values = [
+                    task.userId,
+                    task.goalId,
+                    task.projectId || null,
+                    task.title,
+                    task.estimatedMinutes || 30,
+                    task.status || 'pending',
+                    task.priorityOverride || 3,
+                    task.isFixed || false,
+                    task.requiredEnergy || 3,
+                    task.scheduledStartTime || null
+                ];
+
+                const result = await dbClient.query(sql, values);
+
+                if (result.rows.length === 0) {
+                    throw new Error(`Failed to create task: ${task.title}`);
+                }
+
+                createdTasks.push(this.mapRowToTask(result.rows[0]));
+            }
+
+            if (shouldManageTransaction) {
+                await dbClient.query('COMMIT');
+            }
+
+            return createdTasks;
+        } catch (error) {
+            if (shouldManageTransaction) {
+                await dbClient.query('ROLLBACK');
+            }
+            throw error;
+        } finally {
+            if (shouldManageTransaction) {
+                dbClient.release();
+            }
+        }
+    }
+
+    /**
+     * Batch mark multiple tasks as done in a single transaction
+     * @param taskIds Array of task IDs to mark as done
+     * @param userId User ID for ownership validation
+     * @param client Optional PoolClient for external transaction management
+     * @returns Number of tasks updated
+     */
+    async batchMarkAsDone(taskIds: number[], userId: number, client?: PoolClient): Promise<number> {
+        const shouldManageTransaction = !client;
+        const dbClient = client || await pool.connect();
+
+        try {
+            if (shouldManageTransaction) {
+                await dbClient.query('BEGIN');
+            }
+
+            // First, validate that all tasks belong to the user
+            const validationSql = `
+                SELECT COUNT(*) as count
+                FROM tasks
+                WHERE id = ANY($1::int[]) AND user_id = $2
+            `;
+            const validationResult = await dbClient.query(validationSql, [taskIds, userId]);
+            const validCount = parseInt(validationResult.rows[0].count, 10);
+
+            if (validCount !== taskIds.length) {
+                throw new Error(`Not all tasks belong to user or some tasks do not exist. Expected ${taskIds.length}, found ${validCount}`);
+            }
+
+            // Update all tasks to done
+            const updateSql = `
+                UPDATE tasks
+                SET status = 'done', completed_at = NOW()
+                WHERE id = ANY($1::int[]) AND user_id = $2
+            `;
+            const updateResult = await dbClient.query(updateSql, [taskIds, userId]);
+
+            if (shouldManageTransaction) {
+                await dbClient.query('COMMIT');
+            }
+
+            return updateResult.rowCount || 0;
+        } catch (error) {
+            if (shouldManageTransaction) {
+                await dbClient.query('ROLLBACK');
+            }
+            throw error;
+        } finally {
+            if (shouldManageTransaction) {
+                dbClient.release();
+            }
+        }
+    }
+
+    /**
+     * Batch delete (archive) multiple tasks in a single transaction
+     * @param taskIds Array of task IDs to delete
+     * @param userId User ID for ownership validation
+     * @param client Optional PoolClient for external transaction management
+     * @returns Number of tasks deleted
+     */
+    async batchDelete(taskIds: number[], userId: number, client?: PoolClient): Promise<number> {
+        const shouldManageTransaction = !client;
+        const dbClient = client || await pool.connect();
+
+        try {
+            if (shouldManageTransaction) {
+                await dbClient.query('BEGIN');
+            }
+
+            // First, validate that all tasks belong to the user
+            const validationSql = `
+                SELECT COUNT(*) as count
+                FROM tasks
+                WHERE id = ANY($1::int[]) AND user_id = $2
+            `;
+            const validationResult = await dbClient.query(validationSql, [taskIds, userId]);
+            const validCount = parseInt(validationResult.rows[0].count, 10);
+
+            if (validCount !== taskIds.length) {
+                throw new Error(`Not all tasks belong to user or some tasks do not exist. Expected ${taskIds.length}, found ${validCount}`);
+            }
+
+            // Archive all tasks
+            const archiveSql = `
+                UPDATE tasks
+                SET status = 'archived'
+                WHERE id = ANY($1::int[]) AND user_id = $2
+            `;
+            const archiveResult = await dbClient.query(archiveSql, [taskIds, userId]);
+
+            if (shouldManageTransaction) {
+                await dbClient.query('COMMIT');
+            }
+
+            return archiveResult.rowCount || 0;
+        } catch (error) {
+            if (shouldManageTransaction) {
+                await dbClient.query('ROLLBACK');
+            }
+            throw error;
+        } finally {
+            if (shouldManageTransaction) {
+                dbClient.release();
+            }
+        }
+    }
 }
+

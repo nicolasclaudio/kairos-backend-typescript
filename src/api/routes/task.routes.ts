@@ -5,6 +5,7 @@
 
 import { Router } from 'express';
 import { TaskController } from '../controllers/task.controller.js';
+import { TaskBatchController } from '../controllers/task-batch.controller.js';
 import { TaskRepository } from '../../infrastructure/repositories/task.repository.js';
 import { GoalRepository } from '../../infrastructure/repositories/goal.repository.js';
 import { validateTaskCreation } from '../middleware/validation.js';
@@ -14,6 +15,7 @@ const router = Router();
 const taskRepository = new TaskRepository();
 const goalRepository = new GoalRepository();
 const taskController = new TaskController(taskRepository, goalRepository);
+const taskBatchController = new TaskBatchController(taskRepository, goalRepository);
 
 /**
  * POST /api/tasks
@@ -22,6 +24,38 @@ const taskController = new TaskController(taskRepository, goalRepository);
 router.post('/tasks', validateTaskCreation, (req, res) =>
     taskController.createTask(req, res)
 );
+
+// ============================================
+// BATCH OPERATIONS (must be before :id routes)
+// ============================================
+
+/**
+ * POST /api/tasks/batch
+ * Batch create multiple tasks
+ */
+router.post('/tasks/batch', authenticateToken, (req, res) =>
+    taskBatchController.batchCreateTasks(req, res)
+);
+
+/**
+ * PATCH /api/tasks/batch/complete
+ * Batch mark multiple tasks as complete
+ */
+router.patch('/tasks/batch/complete', authenticateToken, (req, res) =>
+    taskBatchController.batchCompleteTasks(req, res)
+);
+
+/**
+ * DELETE /api/tasks/batch
+ * Batch delete multiple tasks
+ */
+router.delete('/tasks/batch', authenticateToken, (req, res) =>
+    taskBatchController.batchDeleteTasks(req, res)
+);
+
+// ============================================
+// SINGLE TASK OPERATIONS
+// ============================================
 
 /**
  * GET /api/tasks/goal/:goalId
