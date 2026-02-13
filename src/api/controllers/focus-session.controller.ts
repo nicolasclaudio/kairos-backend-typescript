@@ -99,4 +99,24 @@ export class FocusSessionController {
             res.status(500).json({ error: 'Internal server error' });
         }
     }
+
+    async getHistory(req: Request, res: Response): Promise<void> {
+        try {
+            const userId = (req as any).user?.id;
+            const page = parseInt(req.query.page as string, 10) || 1;
+            const limit = parseInt(req.query.limit as string, 10) || 20;
+            const offset = (page - 1) * limit;
+
+            if (!userId) {
+                res.status(401).json({ error: 'Unauthorized' });
+                return;
+            }
+
+            const history = await this.focusSessionRepo.findHistory(userId, limit, offset);
+            res.json(history);
+        } catch (error) {
+            console.error('Error fetching session history:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
 }

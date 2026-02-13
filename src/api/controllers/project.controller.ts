@@ -6,15 +6,20 @@ export class ProjectController {
 
     async createProject(req: Request, res: Response): Promise<void> {
         try {
-            const { title, goalId } = req.body;
-            const userId = (req as any).user?.id;
+            const userId = (req as any).user.id;
+            const { title, goalId, color, icon } = req.body;
 
-            if (!userId || !title) {
-                res.status(400).json({ error: 'Missing required fields: title' });
+            if (!title) {
+                res.status(400).json({ error: 'Title is required' });
                 return;
             }
 
-            const project = await this.projectRepo.create(userId, { title, goalId });
+            const project = await this.projectRepo.create(userId, {
+                title,
+                goalId,
+                color,
+                icon
+            });
             res.status(201).json(project);
         } catch (error) {
             console.error('Error creating project:', error);

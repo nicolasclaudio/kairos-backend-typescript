@@ -6,6 +6,7 @@ export interface IFocusSessionRepository {
     complete(sessionId: number, userId: number): Promise<FocusSession | null>;
     findActiveByUser(userId: number): Promise<FocusSession | null>;
     getStats(userId: number, startDate?: Date, endDate?: Date): Promise<any>;
+    findHistory(userId: number, limit: number, offset: number): Promise<{ sessions: FocusSession[], total: number }>;
 }
 
 export class FocusSessionRepository implements IFocusSessionRepository {
@@ -43,6 +44,29 @@ export class FocusSessionRepository implements IFocusSessionRepository {
         `;
         const result = await query(sql, [userId]);
         return result.rows.length > 0 ? this.mapRowToFocusSession(result.rows[0]) : null;
+    }
+
+    async findHistory(userId: number, limit: number, offset: number): Promise<{ sessions: FocusSession[], total: number }> {
+        const sql = `
+            SELECT * FROM focus_sessions
+            WHERE user_id = $1 AND status = 'completed'
+            ORDER BY started_at DESC
+            LIMIT $2 OFFSET $3
+        `;
+        const countSql = `
+            SELECT COUNT(*) as count FROM focus_sessions
+            WHERE user_id = $1 AND status = 'completed'
+        `;
+
+        const [result, countResult] = await Promise.all([
+            query(sql, [userId, limit, offset]),
+            query(countSql, [userId])
+        ]);
+
+        return {
+            sessions: result.rows.map(row => this.mapRowToFocusSession(row)),
+            total: parseInt(countResult.rows[0].count, 10)
+        };
     }
 
     async getStats(userId: number, startDate?: Date, endDate?: Date): Promise<any> {

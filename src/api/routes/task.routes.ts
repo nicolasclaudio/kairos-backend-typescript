@@ -21,7 +21,7 @@ const taskBatchController = new TaskBatchController(taskRepository, goalReposito
  * POST /api/tasks
  * Create a new task
  */
-router.post('/tasks', validateTaskCreation, (req, res) =>
+router.post('/tasks', authenticateToken, (req, res) =>
     taskController.createTask(req, res)
 );
 
