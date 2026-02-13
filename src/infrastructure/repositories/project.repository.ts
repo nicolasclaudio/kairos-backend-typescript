@@ -2,7 +2,7 @@ import { query } from '../../config/database.js';
 import { Project } from '../../domain/entities.js';
 
 export interface IProjectRepository {
-    create(userId: number, data: { title: string; goalId?: number }): Promise<Project>;
+    create(userId: number, data: { title: string; goalId?: number; color?: string; icon?: string }): Promise<Project>;
     findAll(userId: number): Promise<Project[]>;
     findById(projectId: number): Promise<Project | null>;
     update(projectId: number, userId: number, updates: Partial<Project>): Promise<Project | null>;
@@ -11,13 +11,19 @@ export interface IProjectRepository {
 }
 
 export class ProjectRepository implements IProjectRepository {
-    async create(userId: number, data: { title: string; goalId?: number }): Promise<Project> {
+    async create(userId: number, data: { title: string; goalId?: number; color?: string; icon?: string }): Promise<Project> {
         const sql = `
-            INSERT INTO projects (user_id, title, goal_id)
-            VALUES ($1, $2, $3)
+            INSERT INTO projects (user_id, title, goal_id, color, icon)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
         `;
-        const result = await query(sql, [userId, data.title, data.goalId || null]);
+        const result = await query(sql, [
+            userId,
+            data.title,
+            data.goalId || null,
+            data.color || '#6366f1',
+            data.icon || null
+        ]);
         return this.mapRowToProject(result.rows[0]);
     }
 
@@ -38,7 +44,7 @@ export class ProjectRepository implements IProjectRepository {
     }
 
     async update(projectId: number, userId: number, updates: Partial<Project>): Promise<Project | null> {
-        const allowedUpdates = ['title', 'goalId', 'status'];
+        const allowedUpdates = ['title', 'goalId', 'status', 'color', 'icon'];
         const validUpdates = Object.keys(updates).filter(key => allowedUpdates.includes(key));
 
         if (validUpdates.length === 0) return null;
@@ -89,6 +95,8 @@ export class ProjectRepository implements IProjectRepository {
             userId: row.user_id,
             goalId: row.goal_id,
             title: row.title,
+            color: row.color,
+            icon: row.icon,
             status: row.status,
             createdAt: row.created_at,
             updatedAt: row.updated_at

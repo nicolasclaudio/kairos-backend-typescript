@@ -283,8 +283,8 @@ export class TaskRepository implements ITaskRepository {
      */
     async update(taskId: number, userId: number, updates: Partial<Task>): Promise<Task | null> {
         const allowedUpdates = [
-            'title', 'estimatedMinutes', 'status', 'priorityOverride',
-            'isFixed', 'executedMinutes', 'projectId'
+            'title', 'description', 'estimatedMinutes', 'actualMinutes', 'status', 'priorityOverride',
+            'isFixed', 'executedMinutes', 'projectId', 'tags', 'focusPriority', 'plannedAt', 'dueDate'
         ];
 
         const validUpdates = Object.keys(updates).filter(key => allowedUpdates.includes(key));
@@ -307,8 +307,7 @@ export class TaskRepository implements ITaskRepository {
 
         const result = await query(sql, values);
 
-        if (result.rows.length === 0) return null;
-        return this.mapRowToTask(result.rows[0]);
+        return result.rows.length > 0 ? this.mapRowToTask(result.rows[0]) : null;
     }
 
     /**
@@ -407,14 +406,20 @@ export class TaskRepository implements ITaskRepository {
                         goal_id,
                         project_id,
                         title,
+                        description,
                         estimated_minutes,
+                        actual_minutes,
                         status,
                         priority_override,
                         is_fixed,
                         required_energy,
+                        tags,
+                        focus_priority,
+                        planned_at,
+                        due_date,
                         scheduled_start_time
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                     RETURNING *
                 `;
 
@@ -423,11 +428,17 @@ export class TaskRepository implements ITaskRepository {
                     task.goalId,
                     task.projectId || null,
                     task.title,
+                    task.description || null,
                     task.estimatedMinutes || 30,
+                    task.actualMinutes || 0,
                     task.status || 'pending',
                     task.priorityOverride || 3,
                     task.isFixed || false,
                     task.requiredEnergy || 3,
+                    task.tags || [],
+                    task.focusPriority || null,
+                    task.plannedAt || null,
+                    task.dueDate || null,
                     task.scheduledStartTime || null
                 ];
 

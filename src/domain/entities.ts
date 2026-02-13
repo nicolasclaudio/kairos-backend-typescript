@@ -31,6 +31,8 @@ export interface Project {
     userId: number;
     goalId?: number | null;
     title: string;
+    color?: string;
+    icon?: string;
     status: 'active' | 'archived' | 'completed';
     createdAt?: Date;
     updatedAt?: Date;
@@ -42,13 +44,19 @@ export interface Task {
     goalId: number;
     projectId?: number | null;
     title: string;
+    description?: string;
     estimatedMinutes: number;
+    actualMinutes?: number;
     status: 'pending' | 'in_progress' | 'done' | 'archived';
     priorityOverride?: number;
     isFixed: boolean;
     requiredEnergy: number;
+    tags?: string[];
+    focusPriority?: number; // 1-3 for "Big Rocks"
     createdAt?: Date | string;
     scheduledStartTime?: Date;
+    plannedAt?: Date | string; // For "Ritual del Mañana"
+    dueDate?: Date | string;   // Hard deadline
     completedAt?: Date;
 }
 

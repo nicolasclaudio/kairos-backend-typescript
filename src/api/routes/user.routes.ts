@@ -20,4 +20,11 @@ router.post('/users', validateUserRegistration, (req, res) =>
     userController.register(req, res)
 );
 
+// Protected routes
+import { authenticateToken } from '../middleware/auth.middleware.js';
+
+router.patch('/users/me', authenticateToken, (req, res) =>
+    userController.updateProfile(req, res)
+);
+
 export default router;

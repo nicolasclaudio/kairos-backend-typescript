@@ -14,5 +14,6 @@ router.post('/', (req, res) => focusSessionController.startSession(req, res));
 router.patch('/:id/complete', (req, res) => focusSessionController.completeSession(req, res));
 router.get('/stats', (req, res) => focusSessionController.getStats(req, res));
 router.get('/active', (req, res) => focusSessionController.getActiveSession(req, res));
+router.get('/history', (req, res) => focusSessionController.getHistory(req, res));
 
 export default router;

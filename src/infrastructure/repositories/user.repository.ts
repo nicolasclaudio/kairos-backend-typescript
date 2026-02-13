@@ -10,9 +10,9 @@ export interface IUserRepository {
     create(user: Omit<User, 'id'>): Promise<User>;
     findByEmail(email: string): Promise<User | null>;
     findByTelegramId(telegramId: string): Promise<User | null>;
-    findByTelegramId(telegramId: string): Promise<User | null>;
     findById(id: number): Promise<User | null>;
     updateEnergy(userId: number, energy: number): Promise<void>;
+    update(userId: number, updates: Partial<User>): Promise<User | null>;
 }
 
 export class UserRepository implements IUserRepository {
@@ -23,20 +23,10 @@ export class UserRepository implements IUserRepository {
      */
     async create(user: Omit<User, 'id'>): Promise<User> {
         const sql = `
-      INSERT INTO users (
-        telegram_id,
-        username,
-        timezone,
-        work_start_time,
-        work_end_time,
-        initial_velocity_multiplier,
-        current_energy,
-        email,
-        password_hash
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `;
+            INSERT INTO users (telegram_id, username, timezone, work_start_time, work_end_time, initial_velocity_multiplier, current_energy, email, password_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *;
+        `;
 
         const values = [
             user.telegramId,
@@ -45,17 +35,14 @@ export class UserRepository implements IUserRepository {
             user.workStartTime,
             user.workEndTime,
             user.initialVelocityMultiplier,
-            user.currentEnergy || 3,
+            user.currentEnergy || 100, // Default energy
             user.email || null,
             user.passwordHash || null
         ];
 
         const result = await query(sql, values);
 
-        if (result.rows.length === 0) {
-            throw new Error('Failed to create user');
-        }
-
+        // The RETURNING * clause ensures a row is returned on successful insert
         return this.mapRowToUser(result.rows[0]);
     }
 
@@ -114,6 +101,56 @@ export class UserRepository implements IUserRepository {
         const result = await query(sql, [id]);
         if (result.rows.length === 0) return null;
         return this.mapRowToUser(result.rows[0]);
+    }
+
+    /**
+     * Update user profile fields
+     * @param userId User ID to update
+     * @param updates Partial user object with fields to update
+     * @returns Updated user or null if not found
+     */
+    async update(userId: number, updates: Partial<User>): Promise<User | null> {
+        // Whitelist of allowed update fields
+        const allowedUpdates = [
+            'username',
+            'timezone',
+            'workStartTime',
+            'workEndTime',
+            'initialVelocityMultiplier',
+            'currentEnergy'
+        ];
+
+        // Filter to only valid update fields
+        const validUpdates = Object.keys(updates).filter(key => allowedUpdates.includes(key));
+
+        if (validUpdates.length === 0) {
+            return null; // No valid fields to update
+        }
+
+        // Build dynamic SET clause with proper snake_case column names
+        const setClause = validUpdates.map((key, index) => {
+            // Convert camelCase to snake_case
+            const dbCol = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+            return `${dbCol} = $${index + 2}`;
+        }).join(', ');
+
+        const sql = `
+            UPDATE users
+            SET ${setClause}, updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `;
+
+        // Build values array: [userId, ...update values]
+        const values = [userId, ...validUpdates.map(key => (updates as any)[key])];
+
+        try {
+            const result = await query(sql, values);
+            return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
+        } catch (error) {
+            console.error('Error updating user:', error);
+            throw error;
+        }
     }
 
     private mapRowToUser(row: any): User {
